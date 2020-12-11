@@ -427,20 +427,11 @@ class Encoder(nn.Module):
                                             sample_rate[l], sample_style, proj[l], batch_size))
                 input_dim = module_list[-1].out_dim
                 self.sample_rate = self.sample_rate*sample_rate[l]
-<<<<<<< HEAD
-            self.nolstm = False
-        else: # ligru
-            module_list.append(liGRU(input_dim, dim, bidirection, dropout, layer_norm, proj))
-            input_dim = module_list[-1].out_dim
-            self.sample_rate = self.sample_rate*1/4
-            self.nolstm = True
+
 
             
 
-# +
-=======
-       
->>>>>>> jit_ligru
+
         self.in_dim = input_size
         self.out_dim = input_dim
         self.layers = nn.ModuleList(module_list)

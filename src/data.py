@@ -7,7 +7,6 @@ from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 from os.path import join
-#from src.SpecAugment import Augment
 from src.collect_batch import collect_audio_batch, collect_text_batch
 
 def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size, 
@@ -107,12 +106,6 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     '''convert to mel-spectrogram'''
     audio_transform_tr, feat_dim = create_transform(audio.copy(), 'train')
     audio_transform_dv, feat_dim = create_transform(audio.copy(), 'dev')
-    '''add augment function here'''
-    #print(audio_transform_tr)
-    #augment = Augment()
-    #audio_transform_tr = Augment(audio_transform_tr)
-    #### not augment dvset 
-
 
     # Text tokenizer
     tokenizer = load_text_encoder(**text)
@@ -127,7 +120,7 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     shuffle = (mode=='train' and not ascending)
     drop_last = shuffle
     # Create data loader
-    #print(tr_loader_bs)
+
     tr_set = DataLoader(tr_set, batch_size=tr_loader_bs, shuffle=shuffle, drop_last=drop_last, collate_fn=collect_tr,
                         num_workers=n_jobs, pin_memory=use_gpu)
     

@@ -5,17 +5,16 @@ import torch.nn.functional as F
 from torch.nn.utils.rnn import pack_padded_sequence,pad_packed_sequence
 from torch.autograd import Function
 
-<<<<<<< HEAD
+# +
+
 FBANK_SIZE = 40
+# -
 
-=======
-FBANK_SIZE = 80
-<<<<<<< HEAD
 
-=======
-   
->>>>>>> jit_ligru
->>>>>>> master
+
+
+
+
 
 ''' one layer of liGRU using torchscript to accelrate training speed'''
 class liGRU_layer(torch.jit.ScriptModule):
@@ -23,11 +22,6 @@ class liGRU_layer(torch.jit.ScriptModule):
         self,
         input_size,
         hidden_size,
-<<<<<<< HEAD
-        num_layers,
-=======
-        #num_layers,
->>>>>>> jit_ligru
         batch_size,
         dropout=0.0,
         nonlinearity="relu",
@@ -99,22 +93,15 @@ class liGRU_layer(torch.jit.ScriptModule):
         self.drop_mask_te = torch.tensor([1.0], device=device).float()
         self.N_drop_masks = 100
         self.drop_mask_cnt = 0
-<<<<<<< HEAD
-=======
-        self.b_even = True
->>>>>>> jit_ligru
-
         # Setting the activation function
         self.act = torch.nn.ReLU().to(device)
 
     @torch.jit.script_method
     def forward(self, x):
         # type: (Tensor) -> Tensor
-<<<<<<< HEAD
 
-=======
-        #print('li', x.shape)
->>>>>>> jit_ligru
+
+
         if self.bidirectional:
             x_flip = x.flip(0)
             x = torch.cat([x, x_flip], dim=1)
@@ -137,28 +124,15 @@ class liGRU_layer(torch.jit.ScriptModule):
             h_f, h_b = h.chunk(2, dim=1)
             h_b = h_b.flip(0)
             h = torch.cat([h_f, h_b], dim=2)
-<<<<<<< HEAD
 
-=======
-        #print('h', h.shape)
->>>>>>> jit_ligru
+
+
         return h
 
     @torch.jit.script_method
     def ligru_cell(self, wz, wh):
         # type: (Tensor, Tensor) -> Tensor
-<<<<<<< HEAD
 
-        if self.bidirectional:
-            h_init = torch.zeros(
-                2 * self.batch_size,
-                self.hidden_size,
-                device="cuda",
-            )
-            drop_masks_i = self.drop(
-                torch.ones(
-                    self.N_drop_masks,
-=======
         self.batch_size = wh.shape[0]//2
         if self.batch_size % 2 == 0:
             self.b_even = True
@@ -168,24 +142,10 @@ class liGRU_layer(torch.jit.ScriptModule):
         if self.b_even:
             if self.bidirectional:
                 h_init = torch.zeros(
->>>>>>> jit_ligru
                     2 * self.batch_size,
                     self.hidden_size,
                     device="cuda",
                 )
-<<<<<<< HEAD
-            ).data
-
-        else:
-            h_init = torch.zeros(
-                self.batch_size,
-                self.hidden_size,
-                device="cuda",
-            )
-            drop_masks_i = self.drop(
-                torch.ones(
-                    self.N_drop_masks,
-=======
                 drop_masks_i = self.drop(
                     torch.ones(
                         self.N_drop_masks,
@@ -197,62 +157,10 @@ class liGRU_layer(torch.jit.ScriptModule):
 
             else:
                 h_init = torch.zeros(
->>>>>>> jit_ligru
                     self.batch_size,
                     self.hidden_size,
                     device="cuda",
                 )
-<<<<<<< HEAD
-            ).data
-
-        hiddens = []
-        ht = h_init
-
-        if self.training:
-
-            drop_mask = drop_masks_i[self.drop_mask_cnt]
-            self.drop_mask_cnt = self.drop_mask_cnt + 1
-
-            if self.drop_mask_cnt >= self.N_drop_masks:
-                self.drop_mask_cnt = 0
-                if self.bidirectional:
-                    drop_masks_i = (
-                        self.drop(
-                            torch.ones(
-                                self.N_drop_masks,
-                                2 * self.batch_size,
-                                self.hidden_size,
-                            )
-                        )
-                        .to(self.device)
-                        .data
-                    )
-                else:
-                    drop_masks_i = (
-                        self.drop(
-                            torch.ones(
-                                self.N_drop_masks,
-                                self.batch_size,
-                                self.hidden_size,
-                            )
-                        )
-                        .to(self.device)
-                        .data
-                    )
-
-        else:
-            drop_mask = self.drop_mask_te
-
-        for k in range(wh.shape[0]):
-
-            uz, uh = self.u(ht).chunk(2, 1)
-
-            at = wh[k] + uh
-            zt = wz[k] + uz
-
-            # ligru equation
-            zt = torch.sigmoid(zt)
-=======
                 drop_masks_i = self.drop(
                     torch.ones(
                         self.N_drop_masks,
@@ -372,31 +280,26 @@ class liGRU_layer(torch.jit.ScriptModule):
         for k in range(wh.shape[1]):
 
             uz, uh = self.u(ht).chunk(2, 1)
-            #print('uz', uz.shape)
-            #print('uh', uh.shape)
             '''bug fixing'''
             at = wh[:, k, :] + uh # B, T, D
             zt = wz[:, k, :] + uz
             # ligru equation
             zt = torch.sigmoid(zt)
-            #print('at:', at)
-            #print(drop_mask.shape)
->>>>>>> jit_ligru
+
             hcand = self.act(at) * drop_mask
             ht = zt * ht + (1 - zt) * hcand
             hiddens.append(ht)
 
         # Stacking hidden states
         h = torch.stack(hiddens)
-<<<<<<< HEAD
-        return h
 
-=======
+
         h = h.permute(1, 0, 2)
         return h
 
 
->>>>>>> jit_ligru
+# +
+
 def flip(x, dim):
     xsize = x.size()
     dim = x.dim() + dim if dim < 0 else dim
@@ -406,6 +309,9 @@ def flip(x, dim):
         :, getattr(torch.arange(x.size(1) - 1, -1, -1), ("cpu", "cuda")[x.is_cuda])().long(), :
     ]
     return x.view(xsize)
+
+
+# -
 
 def act_fun(act_type):
 
