@@ -238,10 +238,9 @@ class Solver(BaseSolver):
                     
                 if self.lr_scheduler == None:
                     lr = self.optimizer.opt.param_groups[0]['lr']
-                    #self.optimizer.adjust_learning_rate(self.optimizer, self.step, lr)
                     
                     if self.step == 1:
-                        print('[INFO]    using lr schedular created by Daniel, init lr = ', lr)
+                        print('[INFO]    using lr schedular defined by Daniel, init lr = ', lr)
 
                     if self.step >99999 and self.step%2000==0:
                         lr = lr*0.85

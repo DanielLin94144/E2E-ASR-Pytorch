@@ -366,13 +366,10 @@ class Augment(nn.Module):
 
         spec = self.time_mask(spec, T=self.T, num_masks=self.num_masks, replace_with_zero=self.replace_with_zero)
         spec = self.freq_mask(spec, F=self.F, num_masks=self.num_masks, replace_with_zero=self.replace_with_zero)
-        #self.tensor_to_img(spec, 'augment.png')
         spec = spec.permute(1, 0)
         
-        #print(spec.shape)
         return spec
     def normalize(self, spec):
-        #for i in range(0, len(spec)):
         spec = (spec-spec.mean())/spec.std()
         return spec        
 
@@ -381,14 +378,10 @@ class Augment(nn.Module):
         len_spectro = cloned.shape[1]
         
         for i in range(0, num_masks):
-            #t = random.randrange(0, T)
             t = torch.randint(0, self.T, (1,)).item()
-            #t_zero = random.randrange(0, len_spectro - t)
             t_zero = torch.randint(0, len_spectro-t, (1,)).item()
             # avoids randrange error if values are equal and range is empty
             if (t_zero == t_zero + t): return cloned
-
-            #mask_end = random.randrange(t_zero, t_zero + t, 1)
             mask_end = torch.randint(t_zero, t_zero+t, (1, )).item()
 
             if (replace_with_zero): cloned[:,t_zero:mask_end] = 0
@@ -443,72 +436,7 @@ class Augment(nn.Module):
                             torch.tensor([[[y, point_to_warp + dist_to_warp]]], device=device))
         warped_spectro, dense_flows = sparse_image_warp(spec, src_pts, dest_pts)
         return warped_spectro.squeeze(3)
-'''
-    def test_time_warp():
-        tensor_to_img(time_warp(spectro))
-        tensor_to_img(spectro)    
-
-
-
-    def test_freq_mask():
-        tensor_to_img(freq_mask(spectro))
-        # Two Masks...
-        tensor_to_img(freq_mask(spectro, num_masks=2))
-        # with zeros
-        tensor_to_img(freq_mask(spectro, num_masks=2, replace_with_zero=True))
-
-
-    def test_time_mask():
-        tensor_to_img(time_mask(spectro))
-        # Two Masks...
-        tensor_to_img(time_mask(spectro, num_masks=2))
-        # with zeros
-        tensor_to_img(time_mask(spectro, num_masks=2, replace_with_zero=True))
-
-    def tfm_spectro(ad, sr):
-        # We must reshape signal for torchaudio to generate the spectrogram.
-        ws=512
-        hop=256
-        to_db_scale=False
-        n_fft=1024
-        f_min=0.0
-        f_max=-80 
-        pad=0
-        n_mels=128
-        #mel = transforms.MelSpectrogram(sr, n_mels=n_mels, n_fft=n_fft, hop=hop, f_min=f_min, f_max=f_max, pad=pad)(ad)
-        sp = transforms.Spectrogram()(ad)
-        mel = transforms.MelScale()(sp)
-        #mel = mel.permute(0,2,1) # swap dimension, mostly to look sane to a human.
-        #if to_db_scale: mel = transforms.SpectrogramToDB(stype='magnitude', top_db=f_max)(mel)
-        #mel = mel.detach().numpy()
-        if to_db_scale: 
-            mel = 20*torch.log10(mel)
-        return mel
-
-
-        
-
-    sample = '/Home/daniel094144/End-to-end-ASR-Pytorch/spec_augment/party-crowd.wav'
-
-    audio, sr = torchaudio.load(sample)
-
-
-    #plt.figure()
-    #plt.plot(audio.detach().numpy())
-
-    spectro = tfm_spectro(audio, sr)
-    tensor_to_img(spectro, 'sp')
-    #tensor_to_img(time_warp(spectro))
-    tensor_to_img(time_mask(spectro), 'tm')
-    tensor_to_img(time_mask(spectro, num_masks=2), '2_tm')
-    
-    (spectro.shape)
-    #tensor_to_img(time_warp(spectro), 'tw')
-
-    
-    
-    tensor_to_img(freq_mask(spectro), 'fm')
-'''
+""
 def pop_audio_config(audio_config):
     # Delta
     delta_order = audio_config.pop("delta_order", 0)

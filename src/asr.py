@@ -40,7 +40,8 @@ class ASR(nn.Module):
 
         # Init
     
-        init_adadelta = False  """special initialization not work"""
+        """special initialization not work"""
+        init_adadelta = False  
         if init_adadelta:
             self.apply(init_weights)
             if self.enable_att:
