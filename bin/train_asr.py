@@ -72,8 +72,8 @@ class Solver(BaseSolver):
         model_paras = [{'params':self.model.parameters()}]
 
         # Losses
-        '''testing label smoothing'''
-        LS = True
+        
+        '''label smoothing'''
         if self.config['hparas']['label_smoothing']:
             self.seq_loss = LabelSmoothingLoss(31, 0.1)   
             print('[INFO]  using label smoothing. ') 
@@ -149,12 +149,8 @@ class Solver(BaseSolver):
                 
                 # Fetch data
                 feat, feat_len, txt, txt_len = self.fetch_data(data, train=True)
-                
-                
-                #print(feat.shape)
-                #print(feat_len) # is the feature len of each batch []
+            
                 self.timer.cnt('rd')
-                #print(feat.shape)
                 # Forward model
                 # Note: txt should NOT start w/ <sos>
                 ctc_output, encode_len, att_output, att_align, dec_state = \

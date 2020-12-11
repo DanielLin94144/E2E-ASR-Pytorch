@@ -21,31 +21,12 @@ class Optimizer():
             init_lr = lr
             self.lr_scheduler = lambda step: init_lr * warmup_step **0.5 * np.minimum((step+1)*warmup_step**-1.5,(step+1)**-0.5 )
             self.opt = opt(parameters,lr=1.0) 
-        if lr_scheduler == 'reduce_stop_improve':
-            self.opt = opt(parameters,lr=lr,rho=0.95,eps=eps,weight_decay=weight_decay) # adadelta
-            self.lr_scheduler = None
-            #self.lr_scheduler = LR.ReduceLROnPlateau(self.opt, 'min', factor=0.5, patience=0, verbose=True)
         else:
             self.lr_scheduler = None
             if optimizer.lower()[:4] == 'adam':
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay,amsgrad=amsgrad) # ToDo: 1e-8 better?
             else:
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay) # ToDo: 1e-8 better?
-    
-    def adjust_learning_rate(self, optimizer, step, lr):
-        if step == 1:
-            print('[INFO]    using lr schedular created by Daniel, init lr = ', lr)
-
-        if step == 100000:
-            lr = lr*0.5
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            print('[INFO]     at step 100000, lr reduce to', lr)
-        if step == 120000:
-            lr = lr*0.5
-            for param_group in optimizer.param_groups:
-                param_group['lr'] = lr
-            print('[INFO]     at step 120000, lr reduce to', lr)
 
     def get_opt_state_dict(self):
         return self.opt.state_dict()

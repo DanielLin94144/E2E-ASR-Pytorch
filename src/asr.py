@@ -40,7 +40,7 @@ class ASR(nn.Module):
 
         # Init
     
-        init_adadelta = False # set for liGRU
+        init_adadelta = False  """special initialization not work"""
         if init_adadelta:
             self.apply(init_weights)
             if self.enable_att:

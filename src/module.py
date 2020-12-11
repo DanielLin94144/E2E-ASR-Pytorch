@@ -546,10 +546,7 @@ class CNNLayerNorm(nn.Module):
         self.layer_norm = nn.LayerNorm(n_feats)
 
     def forward(self, x):
-        # x (batch, channel, feature, time)
-        #x = x.transpose(2, 3).contiguous() # (batch, channel, time, feature)
         x = self.layer_norm(x)
-        #return x.transpose(2, 3).contiguous() # (batch, channel, feature, time) 
         return x 
 
 class ResidualCNN(nn.Module):
@@ -583,7 +580,6 @@ class ResidualCNN(nn.Module):
 
 
 class VGGExtractor_LN(nn.Module):
-    ''' VGG extractor for ASR described in https://arxiv.org/pdf/1706.02737.pdf'''
     def __init__(self,input_dim):
         super(VGGExtractor_LN, self).__init__()
         self.init_dim = 64
@@ -604,7 +600,6 @@ class VGGExtractor_LN(nn.Module):
                                 CNNLayerNorm(LN_dim),
                                 nn.ReLU(),                              
                                 nn.MaxPool2d(2, stride=2),  # Half-time dimension      
-                                #nn.Dropout2d(p=0.2), 
                                               
                                 nn.Conv2d( self.init_dim, self.hide_dim, 3, stride=1, padding=1),
                                 CNNLayerNorm(LN_dim//2),
@@ -613,7 +608,6 @@ class VGGExtractor_LN(nn.Module):
                                 CNNLayerNorm(LN_dim//2),   
                                 nn.ReLU(),                               
                                 nn.MaxPool2d(2, stride=2), 
-                                #nn.Dropout2d(p=0.2)
                             )
 
     def check_dim(self,input_dim):

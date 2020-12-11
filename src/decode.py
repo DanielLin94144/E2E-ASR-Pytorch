@@ -230,13 +230,15 @@ class Hypothesis:
             #         # <pad>=0, <eos>=1, <unk>=2
             #---------------------------------------------------------------
             #self._vocab_list = ["<pad>", "<eos>", "<unk>"] + vocab_list
+            
+            '''if eos is the top option'''
             if topi[i].item() == 1: # topi : vocab index 
-                #print(att_prob[2:])
                 max_score_no_eos = att_prob[2:].max().item()
-                #print('max', max_score_no_eos)
+                
+                '''eos threshold'''
+                '''if the probability of eos above this threshold, the eos '''
                 if att_prob[topi[i]].item() > eos_threshold * max_score_no_eos:
                     term_score = topv[i].cpu() ## term_score determine end or not
-                    #print('eos')
                     continue
 
             idxes = self.output_seq[:]     # pass by value
