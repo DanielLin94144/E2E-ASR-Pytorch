@@ -3,7 +3,7 @@ For complete introdution and usage, please see the original repository [Alexande
 ## New features
 1. SpecAugment
 2. Label Smoothing
-3. VGG encoder add Layer Normalization
+3. VGG encoder with Layer Normalization
 4. Learning rate scheduler
 5. Stabilizing joint acoustic and language model beam decoding by <eos> threshold
 
