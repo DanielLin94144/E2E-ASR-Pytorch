@@ -107,20 +107,7 @@ class ASR(nn.Module):
         # Encode
         encode_feature,encode_len = self.encoder(audio_feature,feature_len)
         
-        #print(encode_len)
-        # encode_feature.shape is B, T, D
-        #print('input:', audio_feature.shape)
-        #print('encoded:', encode_feature.shape)
-        
-        '''
-        input: torch.Size([16, 2440, 160])
-        encoded: torch.Size([16, 1220, 640])
 
-        In the middle layer, blstm drop half of the time step, so time dim is reduced from 2440 to 1220
-
-        '''
-        # D is 640 since it is bidirectional LSTM (original dim is 320, 320*2)
-    
         # CTC based decoding
         if self.enable_ctc:
             if get_logit:
@@ -140,21 +127,15 @@ class ASR(nn.Module):
             # Preprocess data for teacher forcing
             if teacher is not None:
                 teacher = self.embed_drop(self.pre_embed(teacher))
-            "some bugs need to be fixed when using ligru"
+ 
             # Decode
             for t in range(decode_step):
                 # Attend (inputs current state of first layer, encoded features)
                 attn,context = self.attention(self.decoder.get_query(), encode_feature,encode_len)
-                #print(self.decoder.get_query().shape)
-                #print(self.decoder.get_query())
-                # context.shape is B , 2*D
-                #print(context.shape)
-                #print(last_char.shape)
-                #print(context)
-                #print(attn)
+ 
                 # Decode (inputs context + embedded last character)                
                 decoder_input = torch.cat([last_char,context],dim=-1)
-                '''somethiing wrong with d_state, the problem might be in the decoder'''
+               
                 cur_char, d_state = self.decoder(decoder_input)
                 # Prepare output as input of next step
                 if (teacher is not None):
@@ -273,45 +254,10 @@ class Decoder(nn.Module):
         '''transpose(0, 1) actually does not do anything'''
     def forward(self, x):
         ''' Decode and transform into vocab '''
-        #if not self.training:
-            #if not self.nolstm:
-            #self.layers.flatten_parameters()
-        #print(x.shape)
-        #x, self.hidden_state = self.layers(x.unsqueeze(1),self.hidden_state)
-        #if self.nolstm : # liGRU
-            #print('start:',x.shape)
-            #x = self.layers(x.unsqueeze(1))
-            
-            #print(x.shape)
-            
-            #self.hidden_state = x
-            #print('start:', x)
-            #self.hidden_state.permute(1, 0, 2) 
-            ##torch.Size([8, 1, 320])
-            #x = x.squeeze(1) #[8, 320]
-            #self.hidden_state = x.unsqueeze(0) #[1, 8, 320]
-            #self.hidden_state = x
-            #print(self.hidden_state.shape)
-            
-            
-            #'''hidden state : (layer, B, dim) -> query -> (B, layer*dim)'''
-            #print(x.shape)
-        #else:
-        #print(x.shape) # b, 2*D + D
-
-        #print(x.unsqueeze(1).shape)
-        x, self.hidden_state = self.layers(x.unsqueeze(1), self.hidden_state)
-        #self.hidden_state = x
-        #self.hidden_state.permute(1, 0, 2) 
-        #print(self.hidden_state.shape)
-        #print(x)
-
-        x = x.squeeze(1)
-
-        '''for ligru, 2nd position ouput isn't hidden state'''
-        ''' it is x_len'''
         
-        #print(x.shape)
+        x, self.hidden_state = self.layers(x.unsqueeze(1), self.hidden_state)
+        x = x.squeeze(1)
+        
         char = self.char_trans(self.final_dropout(x))
         return char, x
     
@@ -405,9 +351,7 @@ class Attention(nn.Module):
                     self.value = self.value.repeat(self.num_head,1,1) #
 
         # Calculate attention 
-        #print('decode_state:', dec_state)   
-        #print('query:', query)
-        #print('enc_feature (key)', self.key)
+
         context, attn = self.att_layer(query, self.key, self.value)
         if self.num_head>1:
             context = context.view(bs,self.num_head*self.v_dim)    # BNxD  -> BxND
@@ -493,28 +437,14 @@ class Encoder(nn.Module):
 
             
 
+# +
 =======
-            #self.nolstm = False
+       
 >>>>>>> jit_ligru
         self.in_dim = input_size
         self.out_dim = input_dim
         self.layers = nn.ModuleList(module_list)
-        #self.DNN = DNN(input_dim)
 
-        #print(self.layers)
-        '''
-        # weight initialization 
-        init = True
-        if init == True:
-            for m in self.layers.modules():
-                print(m)
-                if isinstance(m, (nn.Conv2d, nn.Linear, nn.GRU)):
-                    nn.init.orthogonal(m.weight)
-                if isinstance(m, (nn.LSTM)):
-                    for w in m._all_weights:
-                        nn.init.orthogonal(w)
-                    #nn.init.orthogonal(m.weight_hh_l)
-        '''
         # Orthogonal weight initialisation
         '''
         if not self.nolstm :
@@ -527,16 +457,7 @@ class Encoder(nn.Module):
     def forward(self, input_x, enc_len): # enc_len is feature len
         #print(len(self.layers))
         for _, layer in enumerate(self.layers):
-            #print(input_x.shape) torch.Size([8, 1642, 80])
-            #print(input_x.shape) 
-            #print(layer)
             input_x, enc_len = layer(input_x, enc_len) # is time len
-            
-            #print(input_x.shape) 
-            #print('cycle')
-            #print(input_x.shape) torch.Size([8, 410, 2560])
-            # downsampling 4 
-        #input_x = self.DNN(input_x)
 
         return input_x, enc_len
 

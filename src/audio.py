@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchaudio
 #from torchaudio.transforms import TimeMasking, FrequencyMasking
-
+from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, FrequencyMask, TimeMask
 from scipy import signal, ndimage
 from librosa import feature
 import numpy as np
@@ -297,19 +297,15 @@ class ReadAudio(nn.Module):
     def forward(self, filepath):
         if type(filepath) is not str:
             return filepath
-        #waveform, sample_rate = torchaudio.load(filepath)
+        
         waveform, sample_rate = librosa.load(filepath)
         
-        #if sample_rate != self.desired_sr:
-            # Sample all data to specified sample rate
-        #    waveform = torchaudio.compliance.kaldi.resample_waveform(waveform, 
-         #                                                           sample_rate, 
-         #                                                           self.desired_sr)
+        '''if want to use time domain augmentation, do it just after reading raw waveform'''
         if self.mode=="train" and self.time_aug:
             waveform = self.augmenter(samples=waveform, sample_rate=self.desired_sr)
+            
         waveform = torch.tensor(waveform.reshape(1, len(waveform)))
-        #print(waveform)
-        #print('new shape  : {}'.format(torch.tensor(waveform).shape))
+
         return waveform
 
 #################################################
@@ -329,7 +325,6 @@ import librosa.util
 '''
 Time domain augmentataion
 '''
-from audiomentations import Compose, AddGaussianNoise, TimeStretch, PitchShift, Shift, FrequencyMask, TimeMask
 import numpy as np
 class Augment_Time(nn.Module):
     def __init__(self):
@@ -530,7 +525,6 @@ def pop_audio_config(audio_config):
 def create_transform(audio_config, post_process=True, mode='train'):
     # Delta
     delta_order = audio_config.pop("delta_order", 0)
-    #print(delta_order)
     delta_window_size = audio_config.pop("delta_window_size", 2)
     apply_cmvn = audio_config.pop("apply_cmvn", False)
 
@@ -538,13 +532,12 @@ def create_transform(audio_config, post_process=True, mode='train'):
     feat_type = audio_config.pop("feat_type")
     
     feat_dim = audio_config.pop("feat_dim")
-    #print(feat_dim)
+    '''specaug'''
     augment = audio_config.pop("augment")
+    '''time domain augment'''
     time_aug = audio_config.pop("time_aug")
 
     transforms = [ReadAudio(SAMPLE_RATE, mode, time_aug)]
-    #if mode=='train':
-        #transforms.append(Augment_Time())
 
 
     transforms.append(ExtractAudioFeature(mode=feat_type, num_mel_bins=feat_dim, sample_rate=SAMPLE_RATE, **audio_config))
