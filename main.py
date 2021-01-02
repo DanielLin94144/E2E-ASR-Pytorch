@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 # coding: utf-8
+import os
 import yaml
 import torch
+import random
 import argparse
 import numpy as np
 
-# For reproducibility, comment these may speed up training
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
 
 # Arguments
 parser = argparse.ArgumentParser(description='Training E2E asr.')
@@ -29,6 +28,7 @@ parser.add_argument('--amp', action='store_true', help='Option to enable AMP.')
 parser.add_argument('--reserve_gpu', default=0, type=float, help='Option to reserve GPU ram for training.')
 parser.add_argument('--jit', action='store_true', help='Option for enabling jit in pytorch. (feature in development)')
 parser.add_argument('--cuda', default=0, type=int, help='Choose which gpu to use.')
+parser.add_argument('--deterministic', action='store_true', help='Ensuring same behavior')
 
 paras = parser.parse_args()
 setattr(paras,'gpu',not paras.cpu)
@@ -38,12 +38,21 @@ config = yaml.load(open(paras.config,'r'), Loader=yaml.FullLoader)
 
 print('[INFO] Using config {}'.format(paras.config))
 
+random.seed(paras.seed)
 np.random.seed(paras.seed)
 torch.manual_seed(paras.seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(paras.seed)
     # print('There are ', torch.cuda.device_count(), ' device(s) available')
     # print('Using device cuda:', str(paras.cuda))
+    if paras.deterministic:
+        print('Set torch.deterministic(True) for reproducible debugging, ctc_weight should be 0')
+        os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
+        torch.set_deterministic(True)
+        torch.backends.cudnn.enabled = False
+    else:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 # Hack to preserve GPU ram just incase OOM later on server
 if paras.gpu and paras.reserve_gpu>0:
