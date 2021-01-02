@@ -22,7 +22,7 @@ def read_text(file):
 
 class LibriDataset(Dataset):
     def __init__(self, path, split, tokenizer, bucket_size=1, 
-            ascending=False, read_audio=False, sort_by_text=False):
+            ascending=False, read_audio=False, sort_by_text=False, subset=None):
         # Setup
         self.path = path
         self.bucket_size = bucket_size
@@ -33,6 +33,9 @@ class LibriDataset(Dataset):
             if s[0] == 't' or s[0] == 'd':
                 file_list += list(Path(join(path,s)).rglob("*.flac"))
         assert len(file_list)>0, "No data found @ {}".format(path)
+
+        if type(subset) is int:
+            file_list = file_list[:subset]
         
         # Read text
         text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)

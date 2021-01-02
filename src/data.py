@@ -10,7 +10,7 @@ from os.path import join
 from src.collect_batch import collect_audio_batch, collect_text_batch
 
 def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size, 
-                   train_split=None, dev_split=None, test_split=None, read_audio=False):
+                   train_split=None, dev_split=None, test_split=None, read_audio=False, subset=None):
     ''' Interface for creating all kinds of dataset'''
 
     # Recognize corpus
@@ -29,7 +29,7 @@ def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size,
         bucket_size = batch_size if bucketing and (not ascending) else 1 # Ascending without bucketing
         
         if type(dev_split[0]) is not list:
-            dv_set = Dataset(path,dev_split,tokenizer, 1, read_audio=read_audio) # Do not use bucketing for dev set
+            dv_set = Dataset(path,dev_split,tokenizer, 1, read_audio=read_audio, subset=subset) # Do not use bucketing for dev set
             dv_len = len(dv_set)
         else:
             dv_set = []
@@ -40,7 +40,7 @@ def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size,
                     from corpus.preprocess_librispeech import LibriDataset as DevDataset
                 else:
                     raise NotImplementedError(ds[0])
-                dv_set.append(DevDataset(dev_dir,ds,tokenizer, 1))
+                dv_set.append(DevDataset(dev_dir,ds,tokenizer, 1, subset=subset))
             dv_len = sum([len(s) for s in dv_set])
         
         if path[-4:].lower() != name[-4:].lower():
@@ -50,7 +50,8 @@ def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size,
         
         tr_set = Dataset(tr_dir,train_split,tokenizer, bucket_size, 
                     ascending=ascending, 
-                    read_audio=read_audio)
+                    read_audio=read_audio,
+                    subset=subset)
         # Messages to show
         msg_list = _data_msg(name,path,train_split.__str__(),len(tr_set),
                              dev_split.__str__(),dv_len,batch_size,bucketing)
@@ -67,8 +68,8 @@ def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size,
         bucket_size = 1
         if type(dev_split[0]) is list: dev_split = dev_split[0]
         
-        dv_set = Dataset(tt_dir,dev_split,tokenizer, bucket_size, read_audio=read_audio) # Do not use bucketing for dev set
-        tt_set = Dataset(tt_dir,test_split,tokenizer, bucket_size, read_audio=read_audio) # Do not use bucketing for test set
+        dv_set = Dataset(tt_dir,dev_split,tokenizer, bucket_size, read_audio=read_audio, subset=subset) # Do not use bucketing for dev set
+        tt_set = Dataset(tt_dir,test_split,tokenizer, bucket_size, read_audio=read_audio, subset=subset) # Do not use bucketing for test set
         # Messages to show
         msg_list = _data_msg(name,tt_dir,dev_split.__str__(),len(dv_set),
                              test_split.__str__(),len(tt_set),batch_size,False)
