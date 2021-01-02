@@ -8,7 +8,7 @@ from torch.distributions.categorical import Categorical
 
 from src.util import init_weights, init_gate
 from src.module import VGGExtractor, VGGExtractor_LN, VGGExtractor2, FreqVGGExtractor, FreqVGGExtractor2, \
-                        RNNLayer, ScaleDotAttention, LocationAwareAttention, liGRU, act_fun, liGRU_layer
+                        RNNLayer, ScaleDotAttention, LocationAwareAttention, liGRU, act_fun, liGRU_layer, Downsampler
 
 class ASR(nn.Module):
     ''' ASR model, including Encoder/Decoder(s)'''
@@ -416,11 +416,13 @@ class Encoder(nn.Module):
                 vgg_extractor = FreqVGGExtractor2(input_size, vgg_freq, vgg_low_filt)
             elif vgg == 5:
                 vgg_extractor = VGGExtractor_LN(input_size)
+            elif vgg == 6:
+                vgg_extractor = Downsampler(input_size)
             else:
                 raise NotImplementedError('vgg = {} is not available'.format(vgg))
             module_list.append(vgg_extractor)
             input_dim = vgg_extractor.out_dim
-            self.sample_rate = self.sample_rate * (4 if vgg < 3 else 2)
+            self.sample_rate = self.sample_rate * (4 if (vgg < 3 or vgg == 6) else 2)
 
         if module in ['LSTM','GRU', 'liGRU']:
             for l in range(num_layers):
