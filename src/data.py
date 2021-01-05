@@ -59,7 +59,7 @@ def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size,
         return tr_set, dv_set, tr_loader_bs, batch_size, mode, msg_list
     else:
         # Testing model
-        mode = 'test'
+        mode = 'eval'
         if path[-4:].lower() != name[-4:].lower():
             tt_dir = join(path, name)
         else:
@@ -105,8 +105,8 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     ''' Prepare dataloader for training/validation'''
     # Audio feature extractor
     '''convert to mel-spectrogram'''
-    audio_transform_tr, feat_dim = create_transform(audio.copy(), 'train')
-    audio_transform_dv, feat_dim = create_transform(audio.copy(), 'dev')
+    audio_transform_tr, feat_dim = create_transform(audio.copy(), mode='train')
+    audio_transform_dv, feat_dim = create_transform(audio.copy(), mode='eval')
 
     # Text tokenizer
     tokenizer = load_text_encoder(**text)
@@ -115,7 +115,7 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     
     # Collect function
     collect_tr = partial(collect_audio_batch, audio_transform=audio_transform_tr, mode=mode)
-    collect_dv = partial(collect_audio_batch, audio_transform=audio_transform_dv, mode='test')
+    collect_dv = partial(collect_audio_batch, audio_transform=audio_transform_dv, mode='eval')
     
     # Shuffle/drop applied to training set only
     shuffle = (mode=='train' and not ascending)
@@ -146,7 +146,7 @@ def load_textset(n_jobs, use_gpu, pin_memory, corpus, text):
     # Dataset
     tr_set, dv_set, tr_loader_bs, dv_loader_bs, data_msg = create_textset(tokenizer,**corpus)
     collect_tr = partial(collect_text_batch,mode='train')
-    collect_dv = partial(collect_text_batch,mode='dev')
+    collect_dv = partial(collect_text_batch,mode='eval')
     # Dataloader (Text data stored in RAM, no need num_workers)
     tr_set = DataLoader(tr_set, batch_size=tr_loader_bs, shuffle=True, drop_last=True, collate_fn=collect_tr,
                         num_workers=0, pin_memory=use_gpu)
