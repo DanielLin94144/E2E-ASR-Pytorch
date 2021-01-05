@@ -450,7 +450,7 @@ def pop_audio_config(audio_config):
     return audio_config, feat_type, feat_dim
 
 
-def create_transform(audio_config, post_process=True, mode='train'):
+def create_transform(audio_config, mode='train', post_process=True, read_audio=True):
     # Delta
     delta_order = audio_config.pop("delta_order", 0)
     delta_window_size = audio_config.pop("delta_window_size", 2)
@@ -465,8 +465,9 @@ def create_transform(audio_config, post_process=True, mode='train'):
     '''time domain augment'''
     time_aug = audio_config.pop("time_aug")
 
-    transforms = [ReadAudio(SAMPLE_RATE, mode, time_aug)]
-
+    transforms = []
+    if read_audio:
+        transforms.append(ReadAudio(SAMPLE_RATE, mode, time_aug))
 
     transforms.append(ExtractAudioFeature(mode=feat_type, num_mel_bins=feat_dim, sample_rate=SAMPLE_RATE, **audio_config))
 
