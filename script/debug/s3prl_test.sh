@@ -17,7 +17,7 @@ CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
     --ckpdir ${DIR}/ckpt/$1 \
 	--outdir ${DIR}/test_result/$1 \
     --deterministic \
-    --upstream asr_feat
+    --upstream asr_feat \
 
 # Eval
 # python3 eval.py --file ${DIR}/test_result/$1/$1_dev_output.csv
