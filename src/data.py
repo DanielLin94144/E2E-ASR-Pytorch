@@ -103,16 +103,18 @@ def create_textset(tokenizer, train_split, dev_split, name, path, bucketing, bat
 
 def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     ''' Prepare dataloader for training/validation'''
-    # Audio feature extractor
-    '''convert to mel-spectrogram'''
-    audio_transform_tr, feat_dim = create_transform(audio.copy(), mode='train')
-    audio_transform_dv, feat_dim = create_transform(audio.copy(), mode='eval')
-
     # Text tokenizer
     tokenizer = load_text_encoder(**text)
     # Dataset (in testing mode, tr_set=dv_set, dv_set=tt_set)
     tr_set, dv_set, tr_loader_bs, dv_loader_bs, mode, data_msg = create_dataset(tokenizer,ascending,**corpus)
-    
+    # If mode == 'train', tr_set is the train set, dv_set is the development set
+    # If mode == 'eval', tr_set is the development set, dv_set is the test set
+
+    # Audio feature extractor
+    '''convert to mel-spectrogram'''
+    audio_transform_tr, feat_dim = create_transform(audio.copy(), mode=mode)
+    audio_transform_dv, feat_dim = create_transform(audio.copy(), mode='eval')
+
     # Collect function
     collect_tr = partial(collect_audio_batch, audio_transform=audio_transform_tr, mode=mode)
     collect_dv = partial(collect_audio_batch, audio_transform=audio_transform_dv, mode='eval')
@@ -142,14 +144,16 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
 
 
 def load_wav_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
-    # Audio reader
-    tr_audio_reader = ReadAudio(SAMPLE_RATE, mode='train', time_aug=audio['time_aug'])
-    dv_audio_reader = ReadAudio(SAMPLE_RATE, mode='eval', time_aug=audio['time_aug'])
-
     # Text tokenizer
     tokenizer = load_text_encoder(**text)
     # Dataset (in testing mode, tr_set=dv_set, dv_set=tt_set)
     tr_set, dv_set, tr_loader_bs, dv_loader_bs, mode, data_msg = create_dataset(tokenizer,ascending,**corpus)
+    # If mode == 'train', tr_set is the train set, dv_set is the development set
+    # If mode == 'eval', tr_set is the development set, dv_set is the test set
+    
+    # Audio reader
+    tr_audio_reader = ReadAudio(SAMPLE_RATE, mode=mode, time_aug=audio['time_aug'])
+    dv_audio_reader = ReadAudio(SAMPLE_RATE, mode='eval', time_aug=audio['time_aug'])
     
     # Collect function
     collect_tr = partial(collect_wav_batch, audio_reader=tr_audio_reader, mode=mode)
