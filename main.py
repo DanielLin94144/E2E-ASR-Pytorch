@@ -29,6 +29,7 @@ parser.add_argument('--reserve_gpu', default=0, type=float, help='Option to rese
 parser.add_argument('--jit', action='store_true', help='Option for enabling jit in pytorch. (feature in development)')
 parser.add_argument('--cuda', default=0, type=int, help='Choose which gpu to use.')
 parser.add_argument('--deterministic', action='store_true', help='Ensuring same behavior')
+parser.add_argument('--upstream', help='Specify the upstream in S3PRL toolkit, which will replace the feature from src/audio.py')
 
 paras = parser.parse_args()
 setattr(paras,'gpu',not paras.cpu)

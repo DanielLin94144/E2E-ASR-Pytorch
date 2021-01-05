@@ -2,12 +2,12 @@ import torch
 import numpy as np
 from functools import partial
 from src.text import load_text_encoder
-from src.audio import create_transform
+from src.audio import create_transform, ReadAudio, SAMPLE_RATE
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 from os.path import join
-from src.collect_batch import collect_audio_batch, collect_text_batch
+from src.collect_batch import collect_audio_batch, collect_text_batch, collect_wav_batch
 
 def create_dataset(tokenizer, ascending, name, path, bucketing, batch_size, 
                    train_split=None, dev_split=None, test_split=None, read_audio=False, subset=None):
@@ -139,6 +139,41 @@ def load_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
     data_msg.append('I/O spec.  | Audio Feature = {}\t| Feature Dim = {}\t| Token Type = {}\t| Vocab Size = {}'\
                     .format(audio['feat_type'],feat_dim,tokenizer.token_type,tokenizer.vocab_size))
     return tr_set, dv_set, feat_dim, tokenizer.vocab_size, tokenizer, data_msg
+
+
+def load_wav_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
+    # Audio reader
+    tr_audio_reader = ReadAudio(SAMPLE_RATE, mode='train', time_aug=audio['time_aug'])
+    dv_audio_reader = ReadAudio(SAMPLE_RATE, mode='eval', time_aug=audio['time_aug'])
+
+    # Text tokenizer
+    tokenizer = load_text_encoder(**text)
+    # Dataset (in testing mode, tr_set=dv_set, dv_set=tt_set)
+    tr_set, dv_set, tr_loader_bs, dv_loader_bs, mode, data_msg = create_dataset(tokenizer,ascending,**corpus)
+    
+    # Collect function
+    collect_tr = partial(collect_wav_batch, audio_reader=tr_audio_reader, mode=mode)
+    collect_dv = partial(collect_wav_batch, audio_reader=dv_audio_reader, mode='eval')
+    
+    # Shuffle/drop applied to training set only
+    shuffle = (mode=='train' and not ascending)
+    drop_last = shuffle
+    # Create data loader
+
+    tr_set = DataLoader(tr_set, batch_size=tr_loader_bs, shuffle=shuffle, drop_last=drop_last, collate_fn=collect_tr,
+                        num_workers=n_jobs, pin_memory=use_gpu)
+    
+    if type(dv_set) is list:
+        _tmp_set = []
+        for ds in dv_set:
+            _tmp_set.append(DataLoader(ds, batch_size=dv_loader_bs, shuffle=False, drop_last=False, collate_fn=collect_dv,
+                        num_workers=n_jobs, pin_memory=pin_memory))
+        dv_set = _tmp_set
+    else:
+        dv_set = DataLoader(dv_set, batch_size=dv_loader_bs, shuffle=False, drop_last=False, collate_fn=collect_dv,
+                        num_workers=n_jobs, pin_memory=pin_memory)
+    
+    return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg
 
 def load_textset(n_jobs, use_gpu, pin_memory, corpus, text):
     # Text tokenizer

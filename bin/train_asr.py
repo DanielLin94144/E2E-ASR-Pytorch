@@ -1,15 +1,18 @@
 import torch
 import torch.nn as nn
+from torch.nn.utils.rnn import pad_sequence
 import yaml
 
 from src.solver import BaseSolver
 
 from src.asr import ASR
 from src.optim import Optimizer
-from src.data import load_dataset
+from src.data import load_dataset, load_wav_dataset
 from src.util import human_format, cal_er, feat_to_fig, LabelSmoothingLoss
 from src.audio import Delta, Postprocess, Augment
+from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
 
+UPSTREAM_REPO = 'andi611/Self-Supervised-Speech-Pretraining-and-Representation-Learning:benchmark'
 EMPTY_CACHE_STEP = 100
 
 class Solver(BaseSolver):
@@ -26,6 +29,33 @@ class Solver(BaseSolver):
         ''' Move data to device and compute text seq. length'''
         # feat: B x T x D
         _, feat, feat_len, txt = data
+
+        if self.paras.upstream is not None:
+            # feat is raw waveform
+            device = 'cpu' if self.paras.deterministic else self.device
+            self.upstream.to(device)
+            self.specaug.to(device)
+
+            def to_device(feat):
+                return [f.to(device) for f in feat]
+
+            def extract_feature(feat):
+                feat = self.upstream(to_device(feat))
+                if train and self.config['data']['audio']['augment'] and 'aug' not in self.paras.upstream:
+                    feat = [self.specaug(f) for f in feat]
+                return feat
+
+            if HALF_BATCHSIZE_AUDIO_LEN < 3500 and train:
+                first_len = extract_feature(feat[:1])[0].shape[0]
+                if first_len > HALF_BATCHSIZE_AUDIO_LEN:
+                    feat = feat[::2]
+                    txt = txt[::2]
+
+            feat = extract_feature(feat)
+            feat_len = torch.LongTensor([len(f) for f in feat])
+            feat = pad_sequence(feat, batch_first=True)
+            txt = pad_sequence(txt, batch_first=True)
+
         feat = feat.to(self.device)
         feat_len = feat_len.to(self.device)
         txt = txt.to(self.device)
@@ -35,7 +65,22 @@ class Solver(BaseSolver):
 
     def load_data(self):
         ''' Load data for training/validation, store tokenizer and input/output shape'''
-        self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
+        if self.paras.upstream is not None:
+            print(f'[Solver] - using S3PRL {self.paras.upstream}')
+            self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg = \
+                            load_wav_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
+                                        self.curriculum>0,
+                                        **self.config['data'])
+            self.upstream = torch.hub.load(
+                UPSTREAM_REPO,
+                self.paras.upstream,
+                config=self.paras.config,
+                force_reload=True
+            )
+            self.feat_dim = self.upstream.get_output_dim()
+            self.specaug = Augment()
+        else:
+            self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
                          load_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
                                       self.curriculum>0,
                                       **self.config['data'])

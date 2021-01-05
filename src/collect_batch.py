@@ -47,6 +47,35 @@ def collect_audio_batch(batch, audio_transform, mode):
     
     return file, audio_feat, audio_len, text
 
+
+def collect_wav_batch(batch, audio_reader, mode):
+    # Bucketed batch should be [[(file1,txt1),(file2,txt2),...]]
+    if type(batch[0]) is not tuple:
+        batch = batch[0]
+    # Make sure that batch size is reasonable
+    # For each bucket, the first audio must be the longest one
+    # But for multi-dataset, this is not the case !!!!
+    
+    # Read batch
+    file, audio_feat, audio_len, text = [],[],[],[]
+    with torch.no_grad():
+        for index, b in enumerate(batch):
+            if type(b[0]) is str:
+                file.append(str(b[0]).split('/')[-1].split('.')[0])
+                feat = audio_reader(str(b[0])).reshape(-1)
+            else:
+                file.append('dummy')
+                feat = audio_reader(str(b[0])).reshape(-1)
+            audio_feat.append(feat)
+            audio_len.append(len(feat))
+            text.append(torch.LongTensor(b[1]))
+    # Descending audio length within each batch
+    audio_len, file, audio_feat, text = zip(*[(feat_len,f_name,feat,txt) \
+        for feat_len,f_name,feat,txt in zip(audio_len,file,audio_feat,text)])
+    
+    return file, audio_feat, audio_len, text
+
+
 def collect_text_batch(batch, mode):
     '''Collects a batch of text, should be list of list of int token 
        e.g. [txt1 <list>,txt2 <list>,...] '''
