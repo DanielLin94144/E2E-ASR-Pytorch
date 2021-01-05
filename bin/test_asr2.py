@@ -3,12 +3,14 @@ import torch
 from tqdm import tqdm
 from functools import partial
 from joblib import Parallel, delayed
+from torch.nn.utils.rnn import pad_sequence
 
 from src.solver import BaseSolver
 from src.asr import ASR
 from src.decode import BeamDecoder
-from src.data import load_dataset
+from src.data import load_dataset, load_wav_dataset
 
+UPSTREAM_REPO = 'andi611/Self-Supervised-Speech-Pretraining-and-Representation-Learning:benchmark'
 
 class Solver(BaseSolver):
     ''' Solver for training'''
@@ -39,9 +41,22 @@ class Solver(BaseSolver):
 
     def load_data(self):
         ''' Load data for training/validation, store tokenizer and input/output shape'''
-        self.dv_set, self.tt_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
-            load_dataset(self.paras.njobs, self.paras.gpu,
-                         self.paras.pin_memory, False, **self.config['data'])
+        if self.paras.upstream is not None:
+            print(f'[Solver] - using S3PRL {self.paras.upstream}')
+            self.dv_set, self.tt_set, self.vocab_size, self.tokenizer, msg = \
+                            load_wav_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
+                                             False, **self.config['data'])
+            self.upstream = torch.hub.load(
+                UPSTREAM_REPO,
+                self.paras.upstream,
+                config=self.config['src']['config'],
+                force_reload=True
+            )
+            self.feat_dim = self.upstream.get_output_dim()
+        else:
+            self.dv_set, self.tt_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
+                load_dataset(self.paras.njobs, self.paras.gpu,
+                             self.paras.pin_memory, False, **self.config['data'])
         self.verbose(msg)
 
     def set_model(self):
@@ -92,9 +107,33 @@ class Solver(BaseSolver):
                 # Minimal function to pickle
                 beam_decode_func = partial(beam_decode, model=copy.deepcopy(
                     self.decoder), device=self.device)
+
+                def handler(data):
+                    if self.paras.upstream is not None:
+                        # feat is raw waveform
+                        name, feat, feat_len, txt = data
+
+                        device = 'cpu' if self.paras.deterministic else self.device
+                        self.upstream.to(device)
+
+                        def to_device(feat):
+                            return [f.to(device) for f in feat]
+
+                        def extract_feature(feat):
+                            feat = self.upstream(to_device(feat))
+                            return feat
+
+                        feat = extract_feature(feat)
+                        feat_len = torch.LongTensor([len(f) for f in feat])
+                        feat = pad_sequence(feat, batch_first=True)
+                        txt = pad_sequence(txt, batch_first=True)
+                        data = [name, feat, feat_len, txt]
+
+                    return data
+
                 # Parallel beam decode
                 results = Parallel(n_jobs=self.paras.njobs)(
-                    delayed(beam_decode_func)(data) for data in tqdm(ds))
+                    delayed(beam_decode_func)(handler(data)) for data in tqdm(ds))
                 self.verbose(
                     'Results/Beams will be stored at {} / {}.'.format(self.cur_output_path, self.cur_beam_path))
                 self.write_hyp(results, self.cur_output_path,
