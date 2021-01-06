@@ -11,3 +11,5 @@ matplotlib
 librosa
 audiomentations
 editdistance
+gdown
+fairseq
