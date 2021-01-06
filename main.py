@@ -29,6 +29,7 @@ parser.add_argument('--reserve_gpu', default=0, type=float, help='Option to rese
 parser.add_argument('--jit', action='store_true', help='Option for enabling jit in pytorch. (feature in development)')
 parser.add_argument('--cuda', default=0, type=int, help='Choose which gpu to use.')
 parser.add_argument('--deterministic', action='store_true', help='Ensuring same behavior')
+parser.add_argument('--no_cudnn', action='store_true', help='Ensuring same behavior')
 parser.add_argument('--upstream', help='Specify the upstream in S3PRL toolkit, which will replace the feature from src/audio.py')
 
 paras = parser.parse_args()
@@ -50,6 +51,8 @@ if torch.cuda.is_available():
         print('Set torch.deterministic(True) for reproducible debugging, ctc_weight should be 0')
         os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
         torch.set_deterministic(True)
+        torch.backends.cudnn.enabled = False
+    elif paras.no_cudnn:
         torch.backends.cudnn.enabled = False
     else:
         torch.backends.cudnn.deterministic = True
