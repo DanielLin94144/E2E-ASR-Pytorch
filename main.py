@@ -31,6 +31,7 @@ parser.add_argument('--cuda', default=0, type=int, help='Choose which gpu to use
 parser.add_argument('--deterministic', action='store_true', help='Ensuring same behavior')
 parser.add_argument('--no_cudnn', action='store_true', help='Ensuring same behavior')
 parser.add_argument('--upstream', help='Specify the upstream in S3PRL toolkit, which will replace the feature from src/audio.py')
+parser.add_argument('--upstream_trainable', help='Specify whether to fine-tune the upstream model')
 
 paras = parser.parse_args()
 setattr(paras,'gpu',not paras.cpu)

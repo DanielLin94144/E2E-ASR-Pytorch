@@ -51,7 +51,14 @@ class Solver(BaseSolver):
                     feat = feat[::2]
                     txt = txt[::2]
 
-            feat = extract_feature(feat)
+            if self.paras.upstream_trainable:
+                self.upstream.train()
+                feat = extract_feature(feat)
+            else:
+                with torch.no_grad():
+                    self.upstream.eval()
+                    feat = extract_feature(feat)
+
             feat_len = torch.LongTensor([len(f) for f in feat])
             feat = pad_sequence(feat, batch_first=True)
             txt = pad_sequence(txt, batch_first=True)

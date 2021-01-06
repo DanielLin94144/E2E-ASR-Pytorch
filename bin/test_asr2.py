@@ -123,7 +123,10 @@ class Solver(BaseSolver):
                             feat = self.upstream(to_device(feat))
                             return feat
 
-                        feat = extract_feature(feat)
+                        self.upstream.eval()
+                        with torch.no_grad():
+                            feat = extract_feature(feat)
+
                         feat_len = torch.LongTensor([len(f) for f in feat])
                         feat = pad_sequence(feat, batch_first=True)
                         txt = pad_sequence(txt, batch_first=True)
