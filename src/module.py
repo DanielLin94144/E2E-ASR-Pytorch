@@ -585,12 +585,16 @@ class VGGExtractor_LN(nn.Module):
         self.init_dim = 64
         self.hide_dim = 128
         #print(input_dim)
-        in_channel,freq_dim,out_dim = self.check_dim(input_dim)
-       
+        in_channel,freq_dim,out_dim, isupstream = self.check_dim(input_dim)
+        self.upstream = isupstream
+
         self.in_channel = in_channel
         self.freq_dim = freq_dim
         self.out_dim = out_dim
-        LN_dim = FBANK_SIZE
+        if self.upstream:
+            LN_dim = input_dim
+        else:
+            LN_dim = FBANK_SIZE
         
         self.extractor = nn.Sequential(
                                 nn.Conv2d( in_channel, self.init_dim, 3, stride=1, padding=1),
@@ -612,14 +616,19 @@ class VGGExtractor_LN(nn.Module):
 
     def check_dim(self,input_dim):
         # Check input dimension, delta feature should be stack over channel. 
+        print(input_dim)
         if input_dim % 13 == 0:
             # MFCC feature
-            return int(input_dim // 13),13,(13 // 4)*self.hide_dim
+            print("[INFO]   using mfcc feature")
+            return int(input_dim // 13),13,(13 // 4)*self.hide_dim, False
         elif input_dim % FBANK_SIZE == 0:
             # Fbank feature
-            return int(input_dim // FBANK_SIZE),FBANK_SIZE,(FBANK_SIZE//4)*self.hide_dim
+            print("[INFO]   using fbank feature")
+            return int(input_dim // FBANK_SIZE),FBANK_SIZE,(FBANK_SIZE//4)*self.hide_dim, False
         else:
-            raise ValueError('Acoustic feature dimension for VGG should be 13/26/39(MFCC) or 40/80/120(Fbank) but got '+d)
+            print("[INFO]   using upstream feature")
+            return int(1),input_dim,(input_dim//4)*self.hide_dim, True
+            # raise ValueError('Acoustic feature dimension for VGG should be 13/26/39(MFCC) or 40/80/120(Fbank) but got '+d)
 
     def view_input(self,feature,feat_len):
         # downsample time
