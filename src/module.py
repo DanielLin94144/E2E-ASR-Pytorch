@@ -577,8 +577,6 @@ class ResidualCNN(nn.Module):
         return x # (batch, channel, feature, time)
 
 
-
-
 class VGGExtractor_LN(nn.Module):
     def __init__(self,input_dim):
         super(VGGExtractor_LN, self).__init__()
@@ -723,10 +721,9 @@ class Downsampler(nn.Module):
         self.out_dim = input_dim
 
     def forward(self,feature,feat_len):
-        indices = torch.arange(0, feature.size(1), self.sample_rate).to(feature.device)
-        feature = feature.index_select(dim=1, index=indices)
         feat_len = feat_len // self.sample_rate
-        feature = feature[:, :feat_len.max(), :]
+        feature = feature[:, ::self.sample_rate, :]
+
         return feature,feat_len
 
 
