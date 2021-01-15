@@ -10,8 +10,6 @@ from src.asr import ASR
 from src.decode import BeamDecoder
 from src.data import load_dataset, load_wav_dataset
 
-UPSTREAM_REPO = 'andi611/Self-Supervised-Speech-Pretraining-and-Representation-Learning:benchmark'
-
 class Solver(BaseSolver):
     ''' Solver for training'''
 
@@ -47,10 +45,12 @@ class Solver(BaseSolver):
                             load_wav_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
                                              False, **self.config['data'])
             self.upstream = torch.hub.load(
-                UPSTREAM_REPO,
-                self.paras.upstream,
-                config=self.config['src']['config'],
-                force_reload=True
+                's3prl/s3prl',
+                args.upstream,
+                feature_selection = args.upstream_feature_selection,
+                refresh = args.upstream_refresh,
+                ckpt = args.upstream_ckpt,
+                force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()
         else:

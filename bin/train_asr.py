@@ -12,7 +12,6 @@ from src.util import human_format, cal_er, feat_to_fig, LabelSmoothingLoss
 from src.audio import Delta, Postprocess, Augment
 from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
 
-UPSTREAM_REPO = 'andi611/Self-Supervised-Speech-Pretraining-and-Representation-Learning:benchmark'
 EMPTY_CACHE_STEP = 100
 
 class Solver(BaseSolver):
@@ -79,10 +78,12 @@ class Solver(BaseSolver):
                                         self.curriculum>0,
                                         **self.config['data'])
             self.upstream = torch.hub.load(
-                UPSTREAM_REPO,
-                self.paras.upstream,
-                config=self.paras.config,
-                force_reload=True
+                's3prl/s3prl',
+                args.upstream,
+                feature_selection = args.upstream_feature_selection,
+                refresh = args.upstream_refresh,
+                ckpt = args.upstream_ckpt,
+                force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()
             self.specaug = Augment()
