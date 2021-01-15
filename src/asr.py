@@ -418,8 +418,6 @@ class Encoder(nn.Module):
                 vgg_extractor = VGGExtractor_LN(input_size)
             elif vgg == 6:
                 vgg_extractor = Downsampler(input_size)
-            elif vgg == 7:
-                vgg_extractor = Embedding_Extractor(input_size)
             else:
                 raise NotImplementedError('vgg = {} is not available'.format(vgg))
             module_list.append(vgg_extractor)

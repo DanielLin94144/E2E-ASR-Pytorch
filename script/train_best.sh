@@ -10,7 +10,7 @@ DIR="/home/daniel094144/Daniel/E2E-ASR-Pytorch"
 echo "Start running training process of E2E ASR"
 CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
     --name $1 \
-    --njobs 4 \
+    --njobs 16 \
     --seed 0 \
     --logdir ${DIR}/log/ \
     --ckpdir ${DIR}/ckpt/ \
