@@ -16,5 +16,5 @@ CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
     --ckpdir ${DIR}/ckpt/ \
     --outdir ${DIR}/result/ \
     --reserve_gpu 0 \
-    --upstream apc_default \
+    --upstream apc \
     --no_cudnn \
