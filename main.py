@@ -93,7 +93,7 @@ else:
     if paras.test:
         # Test ASR
         assert paras.load is None, 'Load option is mutually exclusive to --test'
-        from bin.test_asr2 import Solver
+        from bin.test_asr import Solver
         mode = 'test'
     else:
         # Train ASR
