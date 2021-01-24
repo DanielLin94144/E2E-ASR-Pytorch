@@ -41,7 +41,7 @@ class ASR(nn.Module):
         # Init
     
         """special initialization not work"""
-        init_adadelta = False  
+        init_adadelta = True  
         if init_adadelta:
             self.apply(init_weights)
             if self.enable_att:
@@ -106,6 +106,7 @@ class ASR(nn.Module):
         dec_state = [] if get_dec_state else None
 
         # Encode
+        # print(audio_feature.shape)
         encode_feature,encode_len = self.encoder(audio_feature,feature_len)
         
 

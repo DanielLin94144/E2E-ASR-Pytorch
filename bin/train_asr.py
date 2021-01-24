@@ -79,10 +79,10 @@ class Solver(BaseSolver):
                                         **self.config['data'])
             self.upstream = torch.hub.load(
                 's3prl/s3prl',
-                args.upstream,
-                feature_selection = args.upstream_feature_selection,
-                refresh = args.upstream_refresh,
-                ckpt = args.upstream_ckpt,
+                self.paras.upstream,
+                feature_selection = self.paras.upstream_feature_selection,
+                refresh = self.paras.upstream_refresh,
+                ckpt = self.paras.upstream_ckpt,
                 force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()

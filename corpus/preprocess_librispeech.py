@@ -8,6 +8,7 @@ OFFICIAL_TXT_SRC  = ['librispeech-lm-norm.txt']  # Additional (official) text sr
 REMOVE_TOP_N_TXT  = 5000000                      # Remove longest N sentence in librispeech-lm-norm.txt
 READ_FILE_THREADS = 16                           # Default num. of threads used for loading LibriSpeech
 
+# +
 def read_text(file):
     '''Get transcription of target wave file, 
        it's somewhat redundant for accessing each txt multiplt times,
@@ -19,14 +20,28 @@ def read_text(file):
         for line in fp:
             if idx == line.split(' ')[0]:
                 return line[:-1].split(' ',1)[1]
+            
+def read_phoneme(file): 
+    task_name = file.split('/')[-4]  # dev-clean
+    src = '/'.join(file.split('/')[:-4])
+
+    src_folder = src +'/'+ task_name + '_from_dict/'
+    idx = file.split('/')[-1].split('.')[0]
+    file_phn = src_folder + idx + '.phn'
+
+    with open(file_phn,'r') as f:
+        for line in f: 
+            return line
 
 class LibriDataset(Dataset):
-    def __init__(self, path, split, tokenizer, bucket_size=1, 
+    def __init__(self, path, split, tokenizer, text_mode, bucket_size=1, 
             ascending=False, read_audio=False, sort_by_text=False, subset=None):
         # Setup
         self.path = path
         self.bucket_size = bucket_size
-
+        self.text_mode = text_mode
+        
+        
         # List all wave files
         file_list = []
         for s in split:
@@ -38,9 +53,16 @@ class LibriDataset(Dataset):
             file_list = file_list[:subset]
         
         # Read text
-        text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
+#         text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
+        
+        # Read text
+        if self.text_mode=='phone':
+            text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_phoneme)(str(f)) for f in file_list)
+        else:
+            text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
         # text = Parallel(n_jobs=-1)(delayed(tokenizer.encode)(txt) for txt in text)
         text = [tokenizer.encode(txt) for txt in text]
+        
         
         # Sort dataset by text length
         # file_len = Parallel(n_jobs=READ_FILE_THREADS)(delayed(getsize)(f) for f in file_list) 
@@ -71,7 +93,7 @@ class LibriDataset(Dataset):
         return len(self.file_list)
 
 class LibriTextDataset(Dataset):
-    def __init__(self, path, split, tokenizer, bucket_size):
+    def __init__(self, path, split, tokenizer, bucket_size, text_mode):
         # Setup
         self.path = path
         self.bucket_size = bucket_size
@@ -90,7 +112,11 @@ class LibriTextDataset(Dataset):
         assert (len(file_list)>0) or (len(all_sent)>0), "No data found @ {}".format(path)
         
         # Read text
-        text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
+        if self.text_mode=='phone':
+            text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_phoneme)(str(f)) for f in file_list)
+            print(text)
+        else:
+            text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
         all_sent.extend(text)
         del text
 
