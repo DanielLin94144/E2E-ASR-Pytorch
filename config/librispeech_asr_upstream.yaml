@@ -43,12 +43,12 @@ hparas:                                   # Experiment hyper-parameters
 model:                                    # Model architecture
   ctc_weight: 1.0                         # Weight for CTC loss
   encoder:
-    vgg: 6                     # 4x reduction on time feature extraction ( 5: VGG + layer normalization)
+    vgg: 7                     # 4x reduction on time feature extraction ( 5: VGG + layer normalization)
     vgg_freq: -1
     vgg_low_filt: -1
     module: 'LSTM'                        # 'LSTM'/'GRU'/'Transformer'
     bidirection: True
-    dim: [128]
+    dim: [256]
     dropout: [0]
     layer_norm: [False]
     proj: [True]           # Linear projection + Tanh after each rnn layer

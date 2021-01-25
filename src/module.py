@@ -729,6 +729,20 @@ class Downsampler(nn.Module):
         return feature,feat_len
 
 
+class Featemb_Extractor(nn.Module):
+    def __init__(self, input_dim):
+        super(Featemb_Extractor, self).__init__()
+        self.emb_dim = 256
+        self.out_dim = 256
+        self.dense = torch.nn.Linear(input_dim, self.emb_dim)
+
+    def forward(self,feature,feat_len):
+        feature = self.dense(feature)
+        # feature = F.relu(feature)
+        return feature,feat_len
+
+
+
 class FreqVGGExtractor(nn.Module):
     ''' Frequency Modification VGG extractor for ASR '''
     def __init__(self,input_dim, split_freq, low_dim=4):

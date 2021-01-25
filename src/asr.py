@@ -8,7 +8,7 @@ from torch.distributions.categorical import Categorical
 
 from src.util import init_weights, init_gate
 from src.module import VGGExtractor, VGGExtractor_LN, VGGExtractor2, FreqVGGExtractor, FreqVGGExtractor2, \
-                        RNNLayer, ScaleDotAttention, LocationAwareAttention, liGRU, act_fun, liGRU_layer, Downsampler
+                        RNNLayer, ScaleDotAttention, LocationAwareAttention, liGRU, act_fun, liGRU_layer, Downsampler, Featemb_Extractor
 
 class ASR(nn.Module):
     ''' ASR model, including Encoder/Decoder(s)'''
@@ -27,8 +27,8 @@ class ASR(nn.Module):
         self.encoder = Encoder(input_size, batch_size, **encoder)
         if self.enable_ctc:
             self.ctc_layer = nn.Sequential(
-                nn.Linear(self.encoder.out_dim, 512), 
-                nn.Linear(512, vocab_size) 
+                nn.Linear(self.encoder.out_dim, vocab_size), 
+                nn.ReLU() 
             )
         if self.enable_att:
             self.dec_dim = decoder['dim']
@@ -77,6 +77,8 @@ class ASR(nn.Module):
             msg.append('           | Freq VGG Extractor w/ time DS rate = 2, freq split = {}, and low-freq filters = {} in encoder enabled.'.format(self.encoder.vgg_freq, self.encoder.vgg_low_filt))
         if self.encoder.vgg == 5:
             msg.append('           | VGG Extractor w/ Layer normalization and downsampling rate = 4.')
+        if self.encoder.vgg == 7:
+            msg.append('           | Project upstream feature to 256 dim, no downsampling on time axis')
 
         if self.enable_ctc:
             msg.append('           | CTC training on encoder enabled ( lambda = {}).'.format(self.ctc_weight))
@@ -399,7 +401,7 @@ class Encoder(nn.Module):
         assert len(sample_rate)==len(dropout), 'Number of layer mismatch'
         assert len(dropout)==len(dim), 'Number of layer mismatch'
         num_layers = len(dim)
-        assert num_layers>=1,'Encoder should have at least 1 layer'
+        # assert num_layers>=1,'Encoder should have at least 1 layer'
 
         # Construct model
         module_list = []
@@ -419,11 +421,16 @@ class Encoder(nn.Module):
                 vgg_extractor = VGGExtractor_LN(input_size)
             elif vgg == 6:
                 vgg_extractor = Downsampler(input_size)
+            elif vgg == 7: 
+                vgg_extractor = Featemb_Extractor(input_size)
             else:
                 raise NotImplementedError('vgg = {} is not available'.format(vgg))
             module_list.append(vgg_extractor)
             input_dim = vgg_extractor.out_dim
-            self.sample_rate = self.sample_rate * (4 if (vgg < 3 or vgg == 6) else 2)
+            if vgg == 7: 
+                self.sample_rate = 1    
+            else: 
+                self.sample_rate = self.sample_rate * (4 if (vgg < 3 or vgg == 6) else 2)
 
         if module in ['LSTM','GRU', 'liGRU']:
             for l in range(num_layers):
