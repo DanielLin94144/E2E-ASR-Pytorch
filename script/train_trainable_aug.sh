@@ -3,7 +3,7 @@
 # $1 : experiment name
 # $2 : cuda id
 
-CONFIG="librispeech_asr_baseline"
+CONFIG="librispeech_asr_trainable_aug"
 
 DIR="/home/darong/other_storage/e2e_model"
 

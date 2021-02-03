@@ -4,7 +4,7 @@ import torch.optim.lr_scheduler as LR
 class Optimizer():
     def __init__(self, parameters, optimizer, lr, eps, lr_scheduler, 
                     tf_start=1, tf_end=1, tf_step=1, tf_step_start=0, 
-                    weight_decay=0, amsgrad=False, **kwargs):
+                    weight_decay=0, momentum=0, amsgrad=False, **kwargs):
         
         # Setup teacher forcing scheduler
         self.tf_type = tf_end!=1
@@ -25,6 +25,8 @@ class Optimizer():
             self.lr_scheduler = None
             if optimizer.lower()[:4] == 'adam':
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay,amsgrad=amsgrad) # ToDo: 1e-8 better?
+            elif optimizer.lower() == 'sgd':
+                self.opt = opt(parameters,lr=lr,weight_decay=weight_decay,momentum=momentum) # ToDo: 1e-8 better?
             else:
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay) # ToDo: 1e-8 better?
 

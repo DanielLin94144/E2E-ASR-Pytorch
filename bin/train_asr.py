@@ -10,6 +10,8 @@ from src.optim import Optimizer
 from src.data import load_dataset, load_wav_dataset
 from src.util import human_format, cal_er, feat_to_fig, LabelSmoothingLoss
 from src.audio import Delta, Postprocess, Augment
+from src.augmentation import TrainableAugment
+from src.search import Search
 from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
 
 EMPTY_CACHE_STEP = 100
@@ -23,6 +25,17 @@ class Solver(BaseSolver):
         self.curriculum = self.config['hparas']['curriculum']
         self.val_mode = self.config['hparas']['val_mode'].lower()
         self.WER = 'per' if self.val_mode == 'per' else 'wer'
+
+        # put specaug config
+        if self.config['augmentation']['type'] == 3: # specaug
+            self.config['data']['audio']['augment'] = self.config['augmentation']['specaug']
+        else:
+            self.config['data']['audio']['augment'] = False
+        # only train aug for type 1
+        if self.config['augmentation']['type'] == 1:
+            self.train_aug = True
+        else:
+            self.train_aug = False
 
     def fetch_data(self, data, train=False):
         ''' Move data to device and compute text seq. length'''
@@ -40,7 +53,7 @@ class Solver(BaseSolver):
 
             def extract_feature(feat):
                 feat = self.upstream(to_device(feat))
-                if train and self.config['data']['audio']['augment'] and 'aug' not in self.paras.upstream:
+                if train and self.specaug and 'aug' not in self.paras.upstream:
                     feat = [self.specaug(f) for f in feat]
                 return feat
 
@@ -86,7 +99,11 @@ class Solver(BaseSolver):
                 force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()
-            self.specaug = Augment()
+            augment = self.config['data']['audio'].pop("augment", False)
+            if augment:
+                self.specaug = Augment(**augment)
+            else:
+                self.specaug = None
         else:
             self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
                          load_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
@@ -118,8 +135,11 @@ class Solver(BaseSolver):
         #print(self.feat_dim) #160
         batch_size = self.config['data']['corpus']['batch_size']//2
         self.model = ASR(self.feat_dim, self.vocab_size, batch_size, **self.config['model']).to(self.device)
-
-
+        self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
+                                    self.config['augmentation']['trainable_aug']['model'], \
+                                    self.config['augmentation']['trainable_aug']['optimizer']).to(self.device)
+        # create search object
+        self.search = Search(self.model, self.aug_model, self.config['hparas'])
 
         self.verbose(self.model.create_msg())
         model_paras = [{'params':self.model.parameters()}]
@@ -133,18 +153,6 @@ class Solver(BaseSolver):
         else:    
             self.seq_loss = torch.nn.CrossEntropyLoss(ignore_index=0)
         self.ctc_loss = torch.nn.CTCLoss(blank=0, zero_infinity=False) # Note: zero_infinity=False is unstable?
-
-        # Plug-ins
-        self.emb_fuse = False
-        self.emb_reg = ('emb' in self.config) and (self.config['emb']['enable'])
-        if self.emb_reg:
-            from src.plugin import EmbeddingRegularizer
-            self.emb_decoder = EmbeddingRegularizer(self.tokenizer, self.model.dec_dim, **self.config['emb']).to(self.device)
-            model_paras.append({'params':self.emb_decoder.parameters()})
-            self.emb_fuse = self.emb_decoder.apply_fuse
-            if self.emb_fuse:
-                self.seq_loss = torch.nn.NLLLoss(ignore_index=0)
-            self.verbose(self.emb_decoder.create_msg())
 
         # Optimizer
         self.optimizer = Optimizer(model_paras, **self.config['hparas'])
@@ -163,6 +171,37 @@ class Solver(BaseSolver):
         
         # Automatically load pre-trained model if self.paras.load is given
         self.load_ckpt()
+        self.aug_model.load_ckpt(self.paras.load_aug)
+
+    def calc_asr_loss(self, ctc_output, encode_len, att_output, txt, txt_len, stop_step):
+        total_loss = 0
+        if self.early_stoping:
+            if self.step > stop_step:
+                ctc_output = None
+                self.model.ctc_weight = 0
+        #print(ctc_output.shape)
+        # Compute all objectives
+        if ctc_output is not None:
+            if self.paras.cudnn_ctc:
+                ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), 
+                                            txt.to_sparse().values().to(device='cpu',dtype=torch.int32),
+                                            [ctc_output.shape[1]]*len(ctc_output),
+                                            #[int(encode_len.max()) for _ in encode_len],
+                                            txt_len.cpu().tolist())
+            else:
+                ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), txt, encode_len, txt_len)
+            total_loss += ctc_loss*self.model.ctc_weight
+            del encode_len
+
+        if att_output is not None:
+            #print(att_output.shape)
+            b,t,_ = att_output.shape
+            att_loss = self.seq_loss(att_output.view(b*t,-1),txt.view(-1))
+            # Sum each uttr and devide by length then mean over batch
+            # att_loss = torch.mean(torch.sum(att_loss.view(b,t),dim=-1)/torch.sum(txt!=0,dim=-1).float())
+            total_loss += att_loss*(1-self.model.ctc_weight)
+
+        return total_loss
 
     def exec(self):
         ''' Training End-to-end ASR system '''
@@ -195,57 +234,26 @@ class Solver(BaseSolver):
                                       False, **self.config['data'])
             
             
-            for data in self.tr_set:
+            for tr_data in self.tr_set:
+                # train model step
                 # Pre-step : update tf_rate/lr_rate and do zero_grad
                 tf_rate = self.optimizer.pre_step(self.step)
-                total_loss = 0
                 
                 # Fetch data
-                feat, feat_len, txt, txt_len = self.fetch_data(data, train=True)
+                feat, feat_len, txt, txt_len = self.fetch_data(tr_data, train=True)
+                aug_feat = self.aug_model(feat, feat_len)
             
                 self.timer.cnt('rd')
                 # Forward model
                 # Note: txt should NOT start w/ <sos>
                 ctc_output, encode_len, att_output, att_align, dec_state = \
-                    self.model( feat, feat_len, max(txt_len), tf_rate=tf_rate,
-                                    teacher=txt, get_dec_state=self.emb_reg)
+                    self.model( aug_feat, feat_len, max(txt_len), tf_rate=tf_rate,
+                                    teacher=txt, get_dec_state=False)
                 # Clear not used objects
                 del att_align
+                del dec_state
 
-                # Plugins
-                if self.emb_reg:
-                    emb_loss, fuse_output = self.emb_decoder( dec_state, att_output, label=txt) 
-                    total_loss += self.emb_decoder.weight*emb_loss
-                else:
-                    del dec_state
-
-                ''' early stopping ctc'''
-                if self.early_stoping:
-                    if self.step > stop_step:
-                        ctc_output = None
-                        self.model.ctc_weight = 0
-                #print(ctc_output.shape)
-                # Compute all objectives
-                if ctc_output is not None:
-                    if self.paras.cudnn_ctc:
-                        ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), 
-                                                 txt.to_sparse().values().to(device='cpu',dtype=torch.int32),
-                                                 [ctc_output.shape[1]]*len(ctc_output),
-                                                 #[int(encode_len.max()) for _ in encode_len],
-                                                 txt_len.cpu().tolist())
-                    else:
-                        ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), txt, encode_len, txt_len)
-                    total_loss += ctc_loss*self.model.ctc_weight
-                    del encode_len
-
-                if att_output is not None:
-                    #print(att_output.shape)
-                    b,t,_ = att_output.shape
-                    att_output = fuse_output if self.emb_fuse else att_output
-                    att_loss = self.seq_loss(att_output.view(b*t,-1),txt.view(-1))
-                    # Sum each uttr and devide by length then mean over batch
-                    # att_loss = torch.mean(torch.sum(att_loss.view(b,t),dim=-1)/torch.sum(txt!=0,dim=-1).float())
-                    total_loss += att_loss*(1-self.model.ctc_weight)
+                total_loss = self.calc_asr_loss(ctc_output, encode_len, att_output, txt, txt_len, stop_step)
 
                 self.timer.cnt('fw')
 
@@ -254,6 +262,17 @@ class Solver(BaseSolver):
 
                 self.step+=1
                 
+                # train aug
+                # TODO add time counter for train aug
+                if self.train_aug:
+                    self.aug_model.optimizer_zero_grad()
+
+                    dv_data = next(iter(self.dv_set))
+                    train_data = [feat, feat_len, txt, txt_len, tf_rate, stop_step]
+                    valid_data = [*self.fetch_data(dv_data), tf_rate, stop_step]
+                    self.search.unrolled_backward(train_data, valid_data, self.optimizer.opt.param_groups[0]['lr'], self.optimizer.opt, self.calc_asr_loss)
+                    self.aug_model.step()
+             
                 # Logger
                 if (self.step==1) or (self.step%self.PROGRESS_STEP==0):
                     self.progress('Tr stat | Loss - {:.2f} | Grad. Norm - {:.2f} | {}'\
@@ -272,11 +291,6 @@ class Solver(BaseSolver):
                     # if self.step==1 or self.step % (self.PROGRESS_STEP * 5) == 0:
                     #     self.write_log('spec_train',feat_to_fig(feat[0].transpose(0,1).cpu().detach(), spec=True))
                     #del total_loss
-                    
-                    if self.emb_fuse: 
-                        if self.emb_decoder.fuse_learnable:
-                            self.write_log('fuse_lambda',{'emb':self.emb_decoder.get_weight()})
-                        self.write_log('fuse_temp',{'temp':self.emb_decoder.get_temp()})
 
                 # Validation
                 if (self.step==1) or (self.step%self.valid_step == 0):

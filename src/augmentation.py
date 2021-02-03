@@ -1,13 +1,60 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class TrainableAugment(nn.Module):
+class TrainableAugment(nn.Module): 
+    def __init__(self, aug_type, model, optimizer):
+        super(TrainableAugment, self).__init__()
+        self.aug_type = aug_type # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
+        if self.aug_type in [3,4]:
+            self.aug_model = None
+            self.optimizer = None
+        elif self.aug_type == 1:
+            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model.set_trainable_aug()
+            opt = getattr(torch.optim, optimizer.pop('optimizer', 'sgd'))
+            self.optimizer = opt(self.aug_model.parameters(), **optimizer)
+        elif self.aug_type == 2:
+            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model.disable_trainable_aug()
+            self.optimizer = None
+        else:
+            raise NotImplementedError
+
+    def get_new_noise(self, feat):
+        return self.aug_model.get_new_noise(feat)
+
+    def forward(self, feat, feat_len, noise=None):
+        if self.aug_type == 1 or self.aug_type == 2:
+            feat = self.aug_model(feat, feat_len, noise=noise)
+        return feat
+
+    def step(self):
+        self.optimizer.step()
+
+    def optimizer_zero_grad(self):
+        self.optimizer.zero_grad()
+
+    def load_ckpt(self, ckpt_path):
+        if ckpt_path and os.path.isfile(ckpt_path):
+            ckpt = torch.load(ckpt_path)
+            self.aug_model.load_state_dict(ckpt['aug_model'])
+            self.optimizer.load_state_dict(ckpt['aug_optimizer'])
+
+    def save_ckpt(self, ckpt_path):
+        full_dict = {
+            "aug_model": self.aug_model.state_dict(),
+            "aug_optimizer": self.optimizer.state_dict()
+        }
+        torch.save(full_dict, ckpt_path)
+
+class _TrainableAugmentModel(nn.Module):
     def __init__(self, T_num_masks=1, F_num_masks=1, noise_dim=None, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
         '''
         noise_dim: the input noise to the generation network
         '''
-        super(TrainableAugment, self).__init__()
+        super(_TrainableAugmentModel, self).__init__()
         self.T_num_masks = T_num_masks
         self.F_num_masks = F_num_masks
 
@@ -34,8 +81,8 @@ class TrainableAugment(nn.Module):
         # init last linear 
         # aug_param layout [T_mask_center, T_mask_width, F_mask_center, F_mask_width] 
         # init mask width to be small 
-        module_list[-2].bias[self.T_num_masks:2*self.T_num_masks] = width_init_bias
-        module_list[-2].bias[(2*self.T_num_masks+self.F_num_masks):(2*self.T_num_masks+2*self.F_num_masks)] = width_init_bias
+        module_list[-2].bias[self.T_num_masks:2*self.T_num_masks].data.fill_(width_init_bias)
+        module_list[-2].bias[(2*self.T_num_masks+self.F_num_masks):(2*self.T_num_masks+2*self.F_num_masks)].data.fill_(width_init_bias)
         self.layers = nn.Sequential(*module_list)
 
     def set_trainable_aug(self):
@@ -44,19 +91,23 @@ class TrainableAugment(nn.Module):
     def disable_trainable_aug(self):
         self.trainable_aug = False
 
-    def forward(self, feat, feat_len):
+    def forward(self, feat, feat_len, noise=None):
         filling_value = 0. if self.replace_with_zero else self._get_mask_mean(feat, feat_len)
-        print('filling_value', filling_value)
-        aug_param = self._generate_aug_param(feat)
-        print('aug_param', aug_param)
+        # print('filling_value', filling_value)
+        aug_param = self._generate_aug_param(feat, noise=noise)
+        # print('aug_param', aug_param)
 
         if self.trainable_aug:
             return self._forward_trainable(feat, feat_len, filling_value, aug_param)
         else:
             return self._forward_not_trainable(feat, feat_len, filling_value, aug_param)
     
-    def _generate_aug_param(self, feat):
-        noise = torch.randn(feat.shape[0], self.noise_dim).to(feat.device)
+    def get_new_noise(self, feat):
+        return torch.randn(feat.shape[0], self.noise_dim).to(feat.device)
+
+    def _generate_aug_param(self, feat, noise=None):
+        if noise is None:
+            noise = self.get_new_noise(feat)
         aug_param = self.layers(noise)
         return aug_param # [B, 2*(T_num_masks+F_num_masks)]
 
@@ -75,7 +126,7 @@ class TrainableAugment(nn.Module):
             SIGMOID_THRESHOLD = 5 # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
             device = mask_center.device
 
-            position = torch.div(torch.range(start=0, end=max_len-1, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
+            position = torch.div(torch.arange(start=0, end=max_len, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
 
             dist_to_center = mask_center.unsqueeze(-1) - position.unsqueeze(1) # [B, num_mask, l]
             abs_ratio = torch.abs(dist_to_center)/mask_width.unsqueeze(-1) # [B, num_mask, l]
@@ -88,14 +139,13 @@ class TrainableAugment(nn.Module):
         T_log_mask_weight = _get_soft_log_left_weight(aug_param[:, :self.T_num_masks], \
                                                       aug_param[:, self.T_num_masks:2*self.T_num_masks], \
                                                       feat_len, feat.shape[1])
-        print('T mask', T_log_mask_weight)
         # mask F
         F_log_mask_weight = _get_soft_log_left_weight(aug_param[:, 2*self.T_num_masks:2*self.T_num_masks+self.F_num_masks], \
                                                       aug_param[:, 2*self.T_num_masks+self.F_num_masks:2*self.T_num_masks+2*self.F_num_masks], \
                                                       feat_len.new_tensor([feat.shape[-1]]), feat.shape[-1])
-        print('F mask', F_log_mask_weight)
         total_log_left_weight = T_log_mask_weight.unsqueeze(-1)+F_log_mask_weight.unsqueeze(1) # [B, T, F]
         total_left_weight = torch.exp(total_log_left_weight)
+        # print(total_left_weight)
 
         new_feat = feat*total_left_weight + filling_value.unsqueeze(1).unsqueeze(1)*(1-total_left_weight)
         # we do not mask the fill result, cuz assume ASR model will handle this
@@ -111,7 +161,7 @@ class TrainableAugment(nn.Module):
             output: [B, l]
             '''
             device = mask_center.device
-            position = torch.div(torch.range(start=0, end=max_len-1, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
+            position = torch.div(torch.arange(start=0, end=max_len, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
 
             mask_left = mask_center  - mask_width/2 - torch.rand_like(mask_center)/length.unsqueeze(-1)
             mask_right = mask_center + mask_width/2 + torch.rand_like(mask_center)/length.unsqueeze(-1)
@@ -133,6 +183,7 @@ class TrainableAugment(nn.Module):
                                 feat_len.new_tensor([feat.shape[-1]]), feat.shape[-1])
 
         total_mask = T_mask.unsqueeze(-1) | F_mask.unsqueeze(1)
+        # print(total_mask)
 
         new_feat = torch.where(total_mask, filling_value.unsqueeze(1).unsqueeze(1), feat)
         # we do not mask the fill result, cuz assume ASR model will handle this
@@ -169,7 +220,7 @@ class TrainableAugment(nn.Module):
         return feat.sum([1,2])/mask.float().sum([1,2])
 
 if __name__ == '__main__':
-    trainable_aug = TrainableAugment().cuda()
+    trainable_aug = _TrainableAugmentModel().cuda()
 
     batch_size = 3
     l = 20
@@ -178,9 +229,8 @@ if __name__ == '__main__':
     # feat_len = torch.randint(1, l-1, size=(batch_size,)).cuda()
     feat_len = torch.tensor([l]*batch_size).cuda()
 
+    opt = torch.optim.SGD(trainable_aug.parameters(), lr=1)
     new_feat_soft  = trainable_aug(feat, feat_len)
 
     trainable_aug.disable_trainable_aug()
     new_feat_hard  = trainable_aug(feat, feat_len)
-
-
