@@ -3,13 +3,14 @@ import numpy as np
 from pathlib import Path
 from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.nn.utils.rnn import pad_sequence
-import src.monitor.logger as logger
+# import src.monitor.logger as logger
 import random
 
 # from numpy.lib.format import open_memmap
 
 BUCKET_SIZE=1
 ILEN_MAX = 100000
+
 
 # def _seed_worker(worker_idx):
     # seed = torch.initial_seed() & ((1 << 63) - 1)
@@ -114,20 +115,28 @@ class BabelDataset(Dataset):
         is_memmap: bool
         """
         if is_memmap:
-            feat_path = data_dir.joinpath('feat').with_suffix('.dat')
-            logger.log(f"Loading {feat_path} from memmap...",prefix='info')
+            # feat_path = data_dir.joinpath('feat').with_suffix('.dat')
+            feat_path = data_dir + 'feat' + '.dat'
+            # logger.log(f"Loading {feat_path} from memmap...",prefix='info')
             self.feat = np.load(feat_path, mmap_mode='r')
         else:
-            feat_path = data_dir.joinpath('feat').with_suffix('.npy')
-            logger.warning(f"Loading whole data ({feat_path}) into RAM")
+            # feat_path = data_dir.joinpath('feat').with_suffix('.npy')
+            feat_path = data_dir + 'feat' + '.npy'
+
+            # logger.warning(f"Loading whole data ({feat_path}) into RAM")
             self.feat = np.load(feat_path)
         
-        self.ilens = np.load(data_dir.joinpath('ilens.npy'))
+        # self.ilens = np.load(data_dir.joinpath('ilens.npy'))
+        self.ilens = np.load(data_dir+'ilens.npy')
+
         self.iptr = np.zeros(len(self.ilens)+1, dtype=int)
         self.ilens.cumsum(out=self.iptr[1:])
 
-        self.label = np.load(data_dir.joinpath('label.npy'))
-        self.olens = np.load(data_dir.joinpath('olens.npy'))
+        # self.label = np.load(data_dir.joinpath('label.npy'))
+        self.label = np.load(data_dir+'label.npy')
+        # self.olens = np.load(data_dir.joinpath('olens.npy'))
+        self.olens = np.load(data_dir+'olens.npy')
+
         self.optr = np.zeros(len(self.olens) + 1, dtype=int)
         self.olens.cumsum(out=self.optr[1:])
 
@@ -153,12 +162,12 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, num_workers=0,
 
     assert not read_file, "Load from Kaldi ark haven't been implemented yet"
     dset = BabelDataset(data_dir, is_memmap)
-
+    
     # if data is already loaded in memory
     if not is_memmap: 
         num_workers = 0
 
-    logger.notice(f"Loading data from {data_dir} with {num_workers} threads")
+    # logger.notice(f"Loading data from {data_dir} with {num_workers} threads")
 
     if is_bucket:
         my_sampler = BucketSampler(dset.ilens, 
@@ -178,91 +187,93 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, num_workers=0,
                             collate_fn=collate_fn, shuffle=shuffle,
                             drop_last=drop_last, pin_memory=pin_memory)
 
-    return loader
+    return loader, len(dset)
 
-class DataContainer:
-    def __init__(self, data_dirs, batch_size, dev_batch_size, is_memmap, 
-                 is_bucket, num_workers=0, min_ilen=None, max_ilen=None, 
-                 half_batch_ilen=None, bucket_reverse=False, shuffle=True, 
-                 read_file=False, drop_last=False, pin_memory=True):
+# class DataContainer:
+#     def __init__(self, data_dirs, batch_size, dev_batch_size, is_memmap, 
+#                  is_bucket, num_workers=0, min_ilen=None, max_ilen=None, 
+#                  half_batch_ilen=None, bucket_reverse=False, shuffle=True, 
+#                  read_file=False, drop_last=False, pin_memory=True):
 
-        self.data_dirs = data_dirs
-        self.num_datasets = len(self.data_dirs)
-        self.batch_size = batch_size
-        self.is_memmap = is_memmap
-        self.is_bucket = is_bucket
-        self.num_workers = num_workers
-        self.min_ilen = min_ilen
-        self.max_ilen = max_ilen
-        self.half_batch_ilen = half_batch_ilen
-        self.bucket_reverse=bucket_reverse
-        self.shuffle = shuffle
-        self.read_file = read_file
-        self.reload_cnt = 0
+#         self.data_dirs = data_dirs
+#         self.num_datasets = len(self.data_dirs)
+#         self.batch_size = batch_size
+#         self.is_memmap = is_memmap
+#         self.is_bucket = is_bucket
+#         self.num_workers = num_workers
+#         self.min_ilen = min_ilen
+#         self.max_ilen = max_ilen
+#         self.half_batch_ilen = half_batch_ilen
+#         self.bucket_reverse=bucket_reverse
+#         self.shuffle = shuffle
+#         self.read_file = read_file
+#         self.reload_cnt = 0
 
-        self.loader_iters = list()
-        self.dev_loaders = list()
+#         self.loader_iters = list()
+#         self.dev_loaders = list()
 
-        for data_dir in self.data_dirs:
-            self.loader_iters.append(
-                iter(get_loader(
-                    data_dir.joinpath('train'),
-                    batch_size = self.batch_size,
-                    is_memmap = self.is_memmap,
-                    is_bucket = self.is_bucket,
-                    num_workers = self.num_workers,
-                    min_ilen = self.min_ilen,
-                    max_ilen = self.max_ilen,
-                    half_batch_ilen = self.half_batch_ilen,
-                    bucket_reverse = self.bucket_reverse,
-                    shuffle = self.shuffle,
-                    read_file = self.read_file
-            )))
-            self.dev_loaders.append(
-                get_loader(
-                data_dir.joinpath('dev'),
-                batch_size = dev_batch_size,
-                is_memmap = self.is_memmap,
-                is_bucket = False,
-                num_workers = self.num_workers,
-                shuffle =False,
-            ))
+#         for data_dir in self.data_dirs:
+#             self.loader_iters.append(
+#                 iter(get_loader(
+#                     data_dir.joinpath('train'),
+#                     batch_size = self.batch_size,
+#                     is_memmap = self.is_memmap,
+#                     is_bucket = self.is_bucket,
+#                     num_workers = self.num_workers,
+#                     min_ilen = self.min_ilen,
+#                     max_ilen = self.max_ilen,
+#                     half_batch_ilen = self.half_batch_ilen,
+#                     bucket_reverse = self.bucket_reverse,
+#                     shuffle = self.shuffle,
+#                     read_file = self.read_file
+#             )))
+#             self.dev_loaders.append(
+#                 get_loader(
+#                 data_dir.joinpath('dev'),
+#                 batch_size = dev_batch_size,
+#                 is_memmap = self.is_memmap,
+#                 is_bucket = False,
+#                 num_workers = self.num_workers,
+#                 shuffle =False,
+#             ))
 
-    def get_item(self, lang_idx=None, num=1):
-        ret_ls = []
-        if lang_idx is None: # for MultiASR
-            lang_ids = np.random.randint(self.num_datasets, size=num)
-        else:
-            lang_ids = np.repeat(lang_idx,num)
+#     def get_item(self, lang_idx=None, num=1):
+#         ret_ls = []
+#         if lang_idx is None: # for MultiASR
+#             lang_ids = np.random.randint(self.num_datasets, size=num)
+#         else:
+#             lang_ids = np.repeat(lang_idx,num)
 
-        for lang_id in lang_ids:
-            try:
-                ret = next(self.loader_iters[lang_id])
-                ret_ls.append((lang_id,ret))
-            except StopIteration:
-                self.loader_iters[lang_id] = iter(get_loader(
-                self.data_dirs[lang_id].joinpath('train'),
-                batch_size = self.batch_size,
-                is_memmap = self.is_memmap,
-                is_bucket = self.is_bucket,
-                num_workers = self.num_workers,
-                min_ilen = self.min_ilen,
-                max_ilen = self.max_ilen,
-                half_batch_ilen = self.half_batch_ilen,
-                bucket_reverse = self.bucket_reverse,
-                shuffle = self.shuffle,
-                read_file = self.read_file))
+#         for lang_id in lang_ids:
+#             try:
+#                 ret = next(self.loader_iters[lang_id])
+#                 ret_ls.append((lang_id,ret))
+#             except StopIteration:
+#                 self.loader_iters[lang_id] = iter(get_loader(
+#                 self.data_dirs[lang_id].joinpath('train'),
+#                 batch_size = self.batch_size,
+#                 is_memmap = self.is_memmap,
+#                 is_bucket = self.is_bucket,
+#                 num_workers = self.num_workers,
+#                 min_ilen = self.min_ilen,
+#                 max_ilen = self.max_ilen,
+#                 half_batch_ilen = self.half_batch_ilen,
+#                 bucket_reverse = self.bucket_reverse,
+#                 shuffle = self.shuffle,
+#                 read_file = self.read_file))
 
-                self.reload_cnt += 1
-                ret = next(self.loader_iters[lang_id])
-                ret_ls.append((lang_id,ret))
+#                 self.reload_cnt += 1
+#                 ret = next(self.loader_iters[lang_id])
+#                 ret_ls.append((lang_id,ret))
 
-        return ret_ls
+#         return ret_ls
 
 # if __name__ == "__main__":
-    # data_dir = 'mydata/eval'
+#     data_dir = '/Home/daniel094144/data_folder/babel/202-swahili/dev/'
 
-    # loader = get_loader(data_dir, batch_size=128, is_memmap=True, num_workers=4)
+#     loader = get_loader(data_dir, is_bucket = True, batch_size=1, is_memmap=True, num_workers=16)
 
-    # for data in loader:
-        # print(data['feats'][-1])
+#     for data in loader:
+#         # print(data['feat'])
+#         print(data[0].shape)
+#         print(data[1])

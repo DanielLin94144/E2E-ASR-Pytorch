@@ -7,7 +7,7 @@ from src.solver import BaseSolver
 
 from src.asr import ASR
 from src.optim import Optimizer
-from src.data import load_dataset, load_wav_dataset
+from src.data import load_dataset, load_wav_dataset, load_babel_dataset
 from src.util import human_format, cal_er, feat_to_fig, LabelSmoothingLoss
 from src.audio import Delta, Postprocess, Augment
 from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
@@ -27,9 +27,25 @@ class Solver(BaseSolver):
     def fetch_data(self, data, train=False):
         ''' Move data to device and compute text seq. length'''
         # feat: B x T x D
-        _, feat, feat_len, txt = data
+        
+        if self.paras.babel is not None: 
+            feat, feat_len, txt, txt_len = data
+            # txt = txt[0]
+            # print(feat)
+            # print(feat_len)
+            # print(txt)
+            # print(txt_len)
+            
+            # feat = pad_sequence(feat, batch_first=True)
+            txt = pad_sequence(txt, batch_first=True)
+            feat = feat.to(self.device)
+            feat_len = feat_len.to(self.device)
+            txt = txt.to(self.device)
+            # txt_len = torch.sum(txt!=0,dim=-1
 
-        if self.paras.upstream is not None:
+            return feat, feat_len, txt, txt_len
+        
+        elif self.paras.upstream is not None:
             # feat is raw waveform
             device = 'cpu' if self.paras.deterministic else self.device
             self.upstream.to(device)
@@ -61,12 +77,19 @@ class Solver(BaseSolver):
             feat_len = torch.LongTensor([len(f) for f in feat])
             feat = pad_sequence(feat, batch_first=True)
             txt = pad_sequence(txt, batch_first=True)
+            
+        else: 
+            _, feat, feat_len, txt = data
 
         feat = feat.to(self.device)
         feat_len = feat_len.to(self.device)
         txt = txt.to(self.device)
         txt_len = torch.sum(txt!=0,dim=-1)
         
+        # print(feat)
+        # print(feat_len)
+        # print(txt)
+        # print(txt_len)
         return feat, feat_len, txt, txt_len
 
     def load_data(self):
@@ -87,6 +110,16 @@ class Solver(BaseSolver):
             )
             self.feat_dim = self.upstream.get_output_dim()
             self.specaug = Augment()
+
+        elif self.paras.babel is not None:
+            print(f'[Solver] - using babel dataset')
+            self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg = \
+                            load_babel_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
+                                        self.curriculum>0,
+                                        **self.config['data'])
+            self.feat_dim = self.config['data']['audio']['feat_dim']
+            self.verbose(msg)
+
         else:
             self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
                          load_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
@@ -199,7 +232,7 @@ class Solver(BaseSolver):
                 # Pre-step : update tf_rate/lr_rate and do zero_grad
                 tf_rate = self.optimizer.pre_step(self.step)
                 total_loss = 0
-                
+            
                 # Fetch data
                 feat, feat_len, txt, txt_len = self.fetch_data(data, train=True)
             

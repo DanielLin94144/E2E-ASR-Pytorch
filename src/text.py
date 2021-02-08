@@ -74,6 +74,12 @@ class CharacterTextEncoder(_BaseTextEncoder):
             # Do not strip space because character based text encoder should
             # have a space token
             vocab_list = [line.strip("\r\n") for line in f]
+        # print(len(vocab_list)) # 28
+        # print("vocal list:", cls(vocab_list)) # 31
+        "if label is number,  need to add 2"
+        # ori: first one is 1: A
+        # after: 0:PAD, 1:EOS, 2: UNK, 3: A
+        #vocab_list = ["<pad>", "<eos>", "<unk>"] + vocab_list"
         return cls(vocab_list)
 
     @property
@@ -217,10 +223,68 @@ class BertTextEncoder(_BaseTextEncoder):
     def unk_idx(self):
         return 2
 
+class BabelEncoder(_BaseTextEncoder):
+    def __init__(self, vocab_list):
+        # Note that vocab_list must not contain <pad>, <eos> and <unk>
+        # <pad>=0, <eos>=1
+        self._vocab_list = ["<pad>", "<eos>"] + vocab_list # no <unk> token because babel_202.txt already has that
+        self._vocab2idx = {v: idx for idx, v in enumerate(self._vocab_list)}
 
-def load_text_encoder(mode, vocab_file):
+    def encode(self, s):
+        # s is already label in number [1,2,3,.....]
+        # -> [0(pad), 1(eos), 2(1), .....]
+        # Manually append eos to the end
+        # return [self.vocab_to_idx(v) for v in s] + [self.eos_idx]
+        return [s+1] + [self.eos_idx]
+
+    def decode(self, idxs, ignore_repeat=False):
+        vocabs = []
+        for t, idx in enumerate(idxs):
+            if idx == self.eos_idx:
+                break
+            elif idx == self.pad_idx or (ignore_repeat and t > 0 and idx == idxs[t - 1 if t > 0 else 0]):
+                continue
+            v = self.idx_to_vocab(idx)
+            vocabs.append(v)
+        return "".join(vocabs)
+
+    @classmethod
+    def load_from_file(cls, vocab_file):
+        with open(vocab_file, "r", encoding='UTF-8') as f:
+            # Do not strip space because character based text encoder should
+            # have a space token
+            vocab_list = [line.strip("\r\n") for line in f]
+        # print(len(vocab_list)) # 28
+        # print("vocal list:", cls(vocab_list)) # 31
+        "if label is number,  need to add 2"
+        # ori: first one is 1: A
+        # after: 0:PAD, 1:EOS, 2: UNK, 3: A
+        #vocab_list = ["<pad>", "<eos>", "<unk>"] + vocab_list"
+        return cls(vocab_list)
+
+    @property
+    def vocab_size(self):
+        return len(self._vocab_list)
+
+    @property
+    def token_type(self):
+        return 'character'
+
+    def vocab_to_idx(self, vocab):
+        return self._vocab2idx.get(vocab, self.unk_idx)
+
+    def idx_to_vocab(self, idx):
+        return self._vocab_list[idx]
+
+
+def load_text_encoder(mode, vocab_file, task='librispeech'):
     if mode == "character":
-        return CharacterTextEncoder.load_from_file(vocab_file)
+        if task == "librispeech":
+            return CharacterTextEncoder.load_from_file(vocab_file)
+        else: # babel
+            print(f'[INFO] - using babel dataset encoder')
+            return BabelEncoder.load_from_file(vocab_file)
+
     elif mode == "subword":
         return SubwordTextEncoder.load_from_file(vocab_file)
     elif mode == "word" or mode == "phone":
