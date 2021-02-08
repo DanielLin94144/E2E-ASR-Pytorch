@@ -1,7 +1,7 @@
 data:
   corpus:                                 # Pass to dataloader
     # The following depends on corpus
-    path: '/home/daniel094144/data_folder/LibriSpeech'
+    path: '/Home/daniel094144/data_folder/LibriSpeech'
     name: 'LibriSpeech'
     train_split: ['train-clean-100']
     dev_split: ['dev-clean']

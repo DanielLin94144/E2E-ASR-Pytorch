@@ -1,29 +1,30 @@
 data:
   corpus:                                 # Pass to dataloader
     # The following depends on corpus
-    path: '/home/daniel094144/data_folder/babel/202-swahili/'
+    path: '/Home/daniel094144/data_folder/babel/202-swahili/'
     name: 'Babel_202'
     train_split: ['train']
     dev_split: ['dev']
     bucketing: True
-    batch_size: 16
+    batch_size: 32
 
   audio:                                  # Pass to audio transform
     feat_type: 'fbank'
-    feat_dim:  40 
+    feat_dim:  83 
     apply_cmvn: False
-    delta_order: 2                      # 0: do nothing, 1: add delta, 2: add delta and accelerate
+    delta_order: 0                      # 0: do nothing, 1: add delta, 2: add delta and accelerate
     delta_window_size: 2
     frame_length: 25 # ms
     frame_shift: 10 # ms
     ref_level_db: 20
     min_level_db: -100
     preemphasis_coeff: 0.97
-    augment: True
+    augment: False
     time_aug: False
   text:
     mode: 'character'                     # 'character'/'word == phone'/'subword'
-    vocab_file: 'corpus/train_units.txt'
+    vocab_file: 'corpus/babel_202.txt'
+    task: 'babel'
 
 hparas:                                   # Experiment hyper-parameters
   valid_step: 2000
@@ -48,11 +49,11 @@ model:                                    # Model architecture
     vgg_low_filt: -1
     module: 'LSTM'                        # 'LSTM'/'GRU'/'Transformer'
     bidirection: True
-    dim: [256,256,256,256,256]
+    dim: [256,256,256,256, 256]
     dropout: [0,0,0,0,0]
     layer_norm: [False, False, False, False, False]
     proj: [True,True,True,True, True]           # Linear projection + Tanh after each rnn layer
-    sample_rate: [1,1, 1,1,1]
+    sample_rate: [1,1,1,1,1]
     sample_style: 'drop'                  # 'drop'/'concat'
   attention:
     mode: 'loc'                           # 'dot'/'loc'
@@ -65,6 +66,6 @@ model:                                    # Model architecture
   decoder:
     module: 'LSTM'                        # 'LSTM'/'GRU'/'Transformer'
     dim: 256
-    layer: 1
+    layer: 2
     dropout: 0
 

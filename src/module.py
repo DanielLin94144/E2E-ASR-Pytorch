@@ -626,7 +626,7 @@ class VGGExtractor_LN(nn.Module):
             print("[INFO]   using fbank feature")
             return int(input_dim // FBANK_SIZE),FBANK_SIZE,(FBANK_SIZE//4)*self.hide_dim, False
         else:
-            print("[INFO]   using upstream feature")
+            print("[INFO]   using feature other than mfcc or fbank, maybe upstream feature or babel feature")
             return int(1),input_dim,(input_dim//4)*self.hide_dim, True
             # raise ValueError('Acoustic feature dimension for VGG should be 13/26/39(MFCC) or 40/80/120(Fbank) but got '+d)
 

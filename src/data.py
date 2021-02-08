@@ -8,6 +8,7 @@ from torch.nn.utils.rnn import pad_sequence
 import torch.nn.functional as F
 from os.path import join
 from src.collect_batch import collect_audio_batch, collect_text_batch, collect_wav_batch
+from src.Babeldataset import get_loader
 
 def create_dataset(tokenizer, ascending, text_mode, name, path, bucketing, batch_size, 
                    train_split=None, dev_split=None, test_split=None, read_audio=False, subset=None):
@@ -197,6 +198,40 @@ def load_textset(n_jobs, use_gpu, pin_memory, corpus, text):
                     .format(tokenizer.token_type,tokenizer.vocab_size))
 
     return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg
+
+"support for babel dataset"
+def load_babel_dataset(n_jobs, use_gpu, pin_memory, ascending, corpus, audio, text):
+    # Text tokenizer
+    tokenizer = load_text_encoder(**text)
+    # # Dataset (in testing mode, tr_set=dv_set, dv_set=tt_set)
+    # tr_set, dv_set, tr_loader_bs, dv_loader_bs, mode, data_msg = create_dataset(tokenizer,ascending,text['mode'], **corpus)
+    # If mode == 'train', tr_set is the train set, dv_set is the development set
+    # If mode == 'eval', tr_set is the development set, dv_set is the test set
+    
+    # Audio reader
+    # tr_audio_reader = ReadAudio(SAMPLE_RATE, mode=mode, time_aug=audio['time_aug'])
+    # dv_audio_reader = ReadAudio(SAMPLE_RATE, mode='eval', time_aug=audio['time_aug'])
+    
+    # # Collect function
+    # collect_tr = partial(collect_wav_batch, audio_reader=tr_audio_reader, mode=mode)
+    # collect_dv = partial(collect_wav_batch, audio_reader=dv_audio_reader, mode='eval')
+    
+    # # Shuffle/drop applied to training set only
+    # shuffle = (mode=='train' and not ascending)
+    # drop_last = shuffle
+    # Create data loader
+
+    tr_data_dir = corpus['path']+corpus['train_split'][0]+'/'
+    dv_data_dir = corpus['path']+corpus['dev_split'][0]+'/'
+
+    tr_set, tr_dataset_len = get_loader(tr_data_dir, is_bucket = corpus['bucketing'], batch_size=corpus['batch_size'], is_memmap=True, num_workers=n_jobs)
+    dv_set, dv_dataset_len = get_loader(dv_data_dir, is_bucket = False, batch_size=corpus['batch_size'], is_memmap=True, num_workers=n_jobs, shuffle=False, drop_last=False)
+
+    data_msg = _data_msg(corpus['name'], corpus['path'], corpus['train_split'].__str__(),tr_dataset_len,
+                             corpus['dev_split'].__str__(), dv_dataset_len, corpus['batch_size'], corpus['bucketing'])
+    
+    return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg
+
 
 
 def _data_msg(name,path,train_split,tr_set,dev_split,dv_set,batch_size,bucketing):

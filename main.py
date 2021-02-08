@@ -30,6 +30,12 @@ parser.add_argument('--jit', action='store_true', help='Option for enabling jit 
 parser.add_argument('--cuda', default=0, type=int, help='Choose which gpu to use.')
 parser.add_argument('--deterministic', action='store_true', help='Ensuring same behavior')
 parser.add_argument('--no_cudnn', action='store_true', help='Ensuring same behavior')
+
+parser.add_argument(
+    '--babel',
+    help='Whether to do ASR on babel-style dataset'
+)
+
 parser.add_argument(
     '--upstream',
     help='Specify the upstream variant according to torch.hub.list'
@@ -54,6 +60,7 @@ parser.add_argument(
     help='Whether to finetune the upstream model'
 )
 
+
 paras = parser.parse_args()
 setattr(paras,'gpu',not paras.cpu)
 setattr(paras,'pin_memory',not paras.no_pin)
@@ -67,8 +74,8 @@ np.random.seed(paras.seed)
 torch.manual_seed(paras.seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(paras.seed)
-    # print('There are ', torch.cuda.device_count(), ' device(s) available')
-    # print('Using device cuda:', str(paras.cuda))
+    print('There are ', torch.cuda.device_count(), ' device(s) available')
+    print('Using device cuda:', str(paras.cuda))
     if paras.deterministic:
         print('Set torch.deterministic(True) for reproducible debugging, ctc_weight should be 0')
         os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'

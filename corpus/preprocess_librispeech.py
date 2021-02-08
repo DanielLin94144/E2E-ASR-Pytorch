@@ -61,7 +61,14 @@ class LibriDataset(Dataset):
         else:
             text = Parallel(n_jobs=READ_FILE_THREADS)(delayed(read_text)(str(f)) for f in file_list)
         # text = Parallel(n_jobs=-1)(delayed(tokenizer.encode)(txt) for txt in text)
+        
+        # print(text[:100])
+        # print('\n')
         text = [tokenizer.encode(txt) for txt in text]
+        
+        # print(text[:100])
+        # print('\n')
+
         
         
         # Sort dataset by text length

@@ -27,8 +27,8 @@ class ASR(nn.Module):
         self.encoder = Encoder(input_size, batch_size, **encoder)
         if self.enable_ctc:
             self.ctc_layer = nn.Sequential(
-                nn.Linear(self.encoder.out_dim, vocab_size), 
-                nn.ReLU() 
+                nn.Linear(self.encoder.out_dim, 256), 
+                nn.Linear(256, vocab_size) 
             )
         if self.enable_att:
             self.dec_dim = decoder['dim']
@@ -41,7 +41,7 @@ class ASR(nn.Module):
         # Init
     
         """special initialization not work"""
-        init_adadelta = True  
+        init_adadelta = False
         if init_adadelta:
             self.apply(init_weights)
             if self.enable_att:
