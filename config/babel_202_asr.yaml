@@ -33,7 +33,7 @@ hparas:                                   # Experiment hyper-parameters
   tf_end: 1.0
   tf_step: 150000
   optimizer: 'Adadelta'
-  lr: 1.0
+  lr: 1
   eps: 0.00000001                          # 1e-8
   lr_scheduler: 'fixed'                    # 'fixed'/'warmup'
   curriculum: 0
@@ -42,7 +42,7 @@ hparas:                                   # Experiment hyper-parameters
   label_smoothing: False
 
 model:                                    # Model architecture
-  ctc_weight: 0.5                         # Weight for CTC loss
+  ctc_weight: 1.0                      # Weight for CTC loss
   encoder:
     vgg: 5                     # 4x reduction on time feature extraction ( 5: VGG + layer normalization)
     vgg_freq: -1

@@ -17,4 +17,5 @@ CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
     --outdir ${DIR}/result/ \
     --reserve_gpu 0 \
     --babel babel \
+    --no_cudnn \
 

@@ -93,8 +93,12 @@ class BaseSolver():
         '''
         if time_cnt:
             self.timer.set()
+        
         loss.backward()
+        # self.GRAD_CLIP = 10
         grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.GRAD_CLIP)
+        
+
 
         if math.isnan(grad_norm):
             self.verbose('Error : grad norm is NaN @ step '+str(self.step))

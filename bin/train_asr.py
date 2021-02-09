@@ -31,17 +31,21 @@ class Solver(BaseSolver):
         if self.paras.babel is not None: 
             feat, feat_len, txt, txt_len = data
             # txt = txt[0]
-            # print(feat)
-            # print(feat_len)
-            # print(txt)
-            # print(txt_len)
+
             
             # feat = pad_sequence(feat, batch_first=True)
+            # txt = [t.append(1) for t in txt]
+            # print(txt)
             txt = pad_sequence(txt, batch_first=True)
             feat = feat.to(self.device)
             feat_len = feat_len.to(self.device)
             txt = txt.to(self.device)
             # txt_len = torch.sum(txt!=0,dim=-1
+            # print(feat)
+            # print(feat_len)
+            # print(txt.shape)
+
+            # print(txt_len)
 
             return feat, feat_len, txt, txt_len
         
@@ -88,7 +92,8 @@ class Solver(BaseSolver):
         
         # print(feat)
         # print(feat_len)
-        # print(txt)
+        # print(txt[0])
+        # print(txt[1])
         # print(txt_len)
         return feat, feat_len, txt, txt_len
 
@@ -165,7 +170,8 @@ class Solver(BaseSolver):
             print('[INFO]  using label smoothing. ') 
         else:    
             self.seq_loss = torch.nn.CrossEntropyLoss(ignore_index=0)
-        self.ctc_loss = torch.nn.CTCLoss(blank=0, zero_infinity=False) # Note: zero_infinity=False is unstable?
+        ### zero_infinity=True
+        self.ctc_loss = torch.nn.CTCLoss(blank=0, zero_infinity=True) # Note: zero_infinity=False is unstable?
 
         # Plug-ins
         self.emb_fuse = False
@@ -319,7 +325,7 @@ class Solver(BaseSolver):
                     else:
                         self.validate(self.dv_set, self.dv_names)
                 if self.step % (len(self.tr_set)// batch_size)==0: # one epoch
-                    print('Have finished epoch: ', self.n_epochs)
+                    # print('Have finished epoch: ', self.n_epochs)
                     self.n_epochs +=1
                     
                 if self.lr_scheduler == None:
