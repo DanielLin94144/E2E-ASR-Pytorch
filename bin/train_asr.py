@@ -30,21 +30,24 @@ class Solver(BaseSolver):
         
         if self.paras.babel is not None: 
             feat, feat_len, txt, txt_len = data
-            # txt = txt[0]
+            # self.specaug.to(device)
 
+            def specaug_babel(feat):
+                if train and self.config['data']['audio']['augment']:
+                    feat = [self.specaug(f) for f in feat]
+                    feat = pad_sequence(feat, batch_first=True)
+                return feat
             
-            # feat = pad_sequence(feat, batch_first=True)
-            # txt = [t.append(1) for t in txt]
-            # print(txt)
             txt = pad_sequence(txt, batch_first=True)
             feat = feat.to(self.device)
             feat_len = feat_len.to(self.device)
             txt = txt.to(self.device)
-            # txt_len = torch.sum(txt!=0,dim=-1
+            
+            feat = specaug_babel(feat)
+            
             # print(feat)
             # print(feat_len)
             # print(txt.shape)
-
             # print(txt_len)
 
             return feat, feat_len, txt, txt_len
@@ -53,7 +56,7 @@ class Solver(BaseSolver):
             # feat is raw waveform
             device = 'cpu' if self.paras.deterministic else self.device
             self.upstream.to(device)
-            self.specaug.to(device)
+            # self.specaug.to(device)
 
             def to_device(feat):
                 return [f.to(device) for f in feat]
@@ -124,6 +127,7 @@ class Solver(BaseSolver):
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
+            self.specaug = Augment()
 
         else:
             self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \

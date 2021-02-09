@@ -19,7 +19,7 @@ data:
     ref_level_db: 20
     min_level_db: -100
     preemphasis_coeff: 0.97
-    augment: False
+    augment: True
     time_aug: False
   text:
     mode: 'character'                     # 'character'/'word == phone'/'subword'
