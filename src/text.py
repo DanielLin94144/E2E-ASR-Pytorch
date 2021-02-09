@@ -229,6 +229,7 @@ class BabelEncoder(_BaseTextEncoder):
         # <pad>=0, <eos>=1
         self._vocab_list = ["<pad>", "<eos>"] + vocab_list # no <unk> token because babel_202.txt already has that
         self._vocab2idx = {v: idx for idx, v in enumerate(self._vocab_list)}
+        print(self._vocab2idx)
 
     def encode(self, s):
         # s is already label in number [1,2,3,.....]

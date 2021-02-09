@@ -27,8 +27,13 @@ def collate_fn(batch):
 
     xs_pad = pad_sequence([d['feat'] for d in batch], batch_first=True)
     ilens = torch.stack([d['ilen'] for d in batch])
-    ys = [d['label'] for d in batch]
-    olens = torch.stack([d['olen'] for d in batch])
+    ys = [d['label']+1 for d in batch] # add 1 to adjust to idx
+    # ys = [t.append(1) for t in ys]
+    eos = torch.tensor([1])
+    ys = [torch.cat((t, eos), 0) for t in ys]
+    
+    # ys = ys.append(int(1)) # add <eos>
+    olens = torch.stack([d['olen']+1 for d in batch])
 
     return xs_pad, ilens, ys, olens
 
