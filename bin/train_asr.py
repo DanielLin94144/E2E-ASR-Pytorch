@@ -177,18 +177,6 @@ class Solver(BaseSolver):
         ### zero_infinity=True
         self.ctc_loss = torch.nn.CTCLoss(blank=0, zero_infinity=True) # Note: zero_infinity=False is unstable?
 
-        # Plug-ins
-        self.emb_fuse = False
-        self.emb_reg = ('emb' in self.config) and (self.config['emb']['enable'])
-        if self.emb_reg:
-            from src.plugin import EmbeddingRegularizer
-            self.emb_decoder = EmbeddingRegularizer(self.tokenizer, self.model.dec_dim, **self.config['emb']).to(self.device)
-            model_paras.append({'params':self.emb_decoder.parameters()})
-            self.emb_fuse = self.emb_decoder.apply_fuse
-            if self.emb_fuse:
-                self.seq_loss = torch.nn.NLLLoss(ignore_index=0)
-            self.verbose(self.emb_decoder.create_msg())
-
         # Optimizer
         self.optimizer = Optimizer(model_paras, **self.config['hparas'])
         self.lr_scheduler = self.optimizer.lr_scheduler
@@ -206,6 +194,36 @@ class Solver(BaseSolver):
         
         # Automatically load pre-trained model if self.paras.load is given
         self.load_ckpt()
+
+    def calc_asr_loss(self, ctc_output, encode_len, att_output, txt, txt_len, stop_step):
+        total_loss = 0
+        if self.early_stoping:
+            if self.step > stop_step:
+                ctc_output = None
+                self.model.ctc_weight = 0
+        #print(ctc_output.shape)
+        # Compute all objectives
+        if ctc_output is not None:
+            if self.paras.cudnn_ctc:
+                ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), 
+                                            txt.to_sparse().values().to(device='cpu',dtype=torch.int32),
+                                            [ctc_output.shape[1]]*len(ctc_output),
+                                            #[int(encode_len.max()) for _ in encode_len],
+                                            txt_len.cpu().tolist())
+            else:
+                ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), txt, encode_len, txt_len)
+            total_loss += ctc_loss*self.model.ctc_weight
+            del encode_len
+
+        if att_output is not None:
+            #print(att_output.shape)
+            b,t,_ = att_output.shape
+            att_loss = self.seq_loss(att_output.view(b*t,-1),txt.view(-1))
+            # Sum each uttr and devide by length then mean over batch
+            # att_loss = torch.mean(torch.sum(att_loss.view(b,t),dim=-1)/torch.sum(txt!=0,dim=-1).float())
+            total_loss += att_loss*(1-self.model.ctc_weight)
+        
+        return total_loss
 
     def exec(self):
         ''' Training End-to-end ASR system '''
@@ -251,44 +269,12 @@ class Solver(BaseSolver):
                 # Note: txt should NOT start w/ <sos>
                 ctc_output, encode_len, att_output, att_align, dec_state = \
                     self.model( feat, feat_len, max(txt_len), tf_rate=tf_rate,
-                                    teacher=txt, get_dec_state=self.emb_reg)
+                                    teacher=txt, get_dec_state=False)
                 # Clear not used objects
                 del att_align
+                del dec_state
 
-                # Plugins
-                if self.emb_reg:
-                    emb_loss, fuse_output = self.emb_decoder( dec_state, att_output, label=txt) 
-                    total_loss += self.emb_decoder.weight*emb_loss
-                else:
-                    del dec_state
-
-                ''' early stopping ctc'''
-                if self.early_stoping:
-                    if self.step > stop_step:
-                        ctc_output = None
-                        self.model.ctc_weight = 0
-                #print(ctc_output.shape)
-                # Compute all objectives
-                if ctc_output is not None:
-                    if self.paras.cudnn_ctc:
-                        ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), 
-                                                 txt.to_sparse().values().to(device='cpu',dtype=torch.int32),
-                                                 [ctc_output.shape[1]]*len(ctc_output),
-                                                 #[int(encode_len.max()) for _ in encode_len],
-                                                 txt_len.cpu().tolist())
-                    else:
-                        ctc_loss = self.ctc_loss(ctc_output.transpose(0,1), txt, encode_len, txt_len)
-                    total_loss += ctc_loss*self.model.ctc_weight
-                    del encode_len
-
-                if att_output is not None:
-                    #print(att_output.shape)
-                    b,t,_ = att_output.shape
-                    att_output = fuse_output if self.emb_fuse else att_output
-                    att_loss = self.seq_loss(att_output.view(b*t,-1),txt.view(-1))
-                    # Sum each uttr and devide by length then mean over batch
-                    # att_loss = torch.mean(torch.sum(att_loss.view(b,t),dim=-1)/torch.sum(txt!=0,dim=-1).float())
-                    total_loss += att_loss*(1-self.model.ctc_weight)
+                total_loss = self.calc_asr_loss(ctc_output, encode_len, att_output, txt, txt_len, stop_step)
 
                 self.timer.cnt('fw')
 
@@ -315,11 +301,6 @@ class Solver(BaseSolver):
                     # if self.step==1 or self.step % (self.PROGRESS_STEP * 5) == 0:
                     #     self.write_log('spec_train',feat_to_fig(feat[0].transpose(0,1).cpu().detach(), spec=True))
                     #del total_loss
-                    
-                    if self.emb_fuse: 
-                        if self.emb_decoder.fuse_learnable:
-                            self.write_log('fuse_lambda',{'emb':self.emb_decoder.get_weight()})
-                        self.write_log('fuse_temp',{'temp':self.emb_decoder.get_temp()})
 
                 # Validation
                 if (self.step==1) or (self.step%self.valid_step == 0):
