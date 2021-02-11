@@ -4,19 +4,19 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TrainableAugment(nn.Module): 
-    def __init__(self, aug_type, model, optimizer):
+    def __init__(self, aug_type, model, optimizer, max_T=None):
         super(TrainableAugment, self).__init__()
         self.aug_type = aug_type # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
         if self.aug_type in [3,4]:
             self.aug_model = None
             self.optimizer = None
         elif self.aug_type == 1:
-            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model = _TrainableAugmentModel(max_T=max_T, **model)
             self.aug_model.set_trainable_aug()
             opt = getattr(torch.optim, optimizer.pop('optimizer', 'sgd'))
             self.optimizer = opt(self.aug_model.parameters(), **optimizer)
         elif self.aug_type == 2:
-            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model = _TrainableAugmentModel(max_T=max_T, **model)
             self.aug_model.disable_trainable_aug()
             self.optimizer = None
         else:
@@ -50,15 +50,17 @@ class TrainableAugment(nn.Module):
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
-    def __init__(self, T_num_masks=1, F_num_masks=1, noise_dim=None, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
+    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=None, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
         '''
         noise_dim: the input noise to the generation network
         '''
         super(_TrainableAugmentModel, self).__init__()
         self.T_num_masks = T_num_masks
         self.F_num_masks = F_num_masks
+        self.max_T = max_T # if max_T is None, the width will multiplied by each sequence length
 
         self.output_dim = (self.T_num_masks+self.F_num_masks)*2 # position and width
+        assert(self.output_dim>0)
         if noise_dim is None:
             self.noise_dim = self.output_dim
         else:
@@ -116,20 +118,25 @@ class _TrainableAugmentModel(nn.Module):
         filling_value: [B]
         aug_param: [B, 2*(F_num_mask+T_num_mask)]
         '''
-        def _get_soft_log_left_weight(mask_center, mask_width, length, max_len):
+        def _get_soft_log_left_weight(mask_center, mask_width, length, padding_len, max_len=None):
             '''
-            length: [B] # can be T or F dimension
             mask_center: [B, num_mask]
             mask_width: [B, num_mask]
+            length: [B] # can be T or F dimension
+            padding_len: int # length after padding
+            max_len: int or None # possible length over whole data, if None, the width will multiply to length
+
             output: [B, l]
             '''
             SIGMOID_THRESHOLD = 5 # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
             device = mask_center.device
 
-            position = torch.div(torch.arange(start=0, end=max_len, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
+            position = torch.arange(start=0, end=padding_len, device=device).unsqueeze(0) # [1, l]
 
-            dist_to_center = mask_center.unsqueeze(-1) - position.unsqueeze(1) # [B, num_mask, l]
-            abs_ratio = torch.abs(dist_to_center)/mask_width.unsqueeze(-1) # [B, num_mask, l]
+            mask_center_recover = mask_center*length.unsqueeze(-1) # [B, num_mask]
+            dist_to_center = mask_center_recover.unsqueeze(-1) - position.unsqueeze(1) # [B, num_mask, l]
+            mask_width_recover = mask_width*max_len if max_len else mask_width*length.unsqueeze(-1)  # [B, num_mask]
+            abs_ratio = torch.abs(dist_to_center)/mask_width_recover.unsqueeze(-1) # [B, num_mask, l]
 
             log_mask_weight = F.logsigmoid((abs_ratio*(2*SIGMOID_THRESHOLD))-SIGMOID_THRESHOLD) # [B, num_mask, l]
             log_mask_weight = log_mask_weight.sum(1) # [B, l]
@@ -138,11 +145,13 @@ class _TrainableAugmentModel(nn.Module):
         # mask T
         T_log_mask_weight = _get_soft_log_left_weight(aug_param[:, :self.T_num_masks], \
                                                       aug_param[:, self.T_num_masks:2*self.T_num_masks], \
-                                                      feat_len, feat.shape[1])
+                                                      feat_len, \
+                                                      feat.shape[1], self.max_T)
         # mask F
         F_log_mask_weight = _get_soft_log_left_weight(aug_param[:, 2*self.T_num_masks:2*self.T_num_masks+self.F_num_masks], \
                                                       aug_param[:, 2*self.T_num_masks+self.F_num_masks:2*self.T_num_masks+2*self.F_num_masks], \
-                                                      feat_len.new_tensor([feat.shape[-1]]), feat.shape[-1])
+                                                      feat_len.new_tensor([feat.shape[-1]]), \
+                                                      feat.shape[-1], None)
         total_log_left_weight = T_log_mask_weight.unsqueeze(-1)+F_log_mask_weight.unsqueeze(1) # [B, T, F]
         total_left_weight = torch.exp(total_log_left_weight)
         # print(total_left_weight)
@@ -153,34 +162,41 @@ class _TrainableAugmentModel(nn.Module):
 
     def _forward_not_trainable(self, feat, feat_len, filling_value, aug_param):
         # use fix 
-        def _get_hard_mask(mask_center, mask_width, length, max_len):
+        def _get_hard_mask(mask_center, mask_width, length, padding_len, max_len=None):
             '''
-            length: [B] # can be T or F dimension
             mask_center: [B, num_mask]
             mask_width: [B, num_mask]
+            length: [B] # can be T or F dimension
+            padding_len: int # length after padding
+            max_len: int or None # possible length over whole data, if None, the width will multiply to length
+
             output: [B, l]
             '''
             device = mask_center.device
-            position = torch.div(torch.arange(start=0, end=max_len, device=device).unsqueeze(0), length.unsqueeze(1)) # [B, l]
+            position = torch.arange(start=0, end=padding_len, device=device).unsqueeze(0) # [1, l]
 
-            mask_left = mask_center  - mask_width/2 - torch.rand_like(mask_center)/length.unsqueeze(-1)
-            mask_right = mask_center + mask_width/2 + torch.rand_like(mask_center)/length.unsqueeze(-1)
+            mask_center_recover = mask_center*length.unsqueeze(-1) # [B, num_mask]
+            mask_width_recover = mask_width*max_len if max_len else mask_width*length.unsqueeze(-1) # [B, num_mask]
+            mask_left = mask_center_recover  - mask_width_recover/2. - torch.rand_like(mask_center_recover) # [B, num_mask]
+            mask_right = mask_center_recover + mask_width_recover/2. + torch.rand_like(mask_center_recover) # [B, num_mask]
 
             mask_left  = position.unsqueeze(1) > mask_left.unsqueeze(-1) # [B, num_mask, l]
             mask_right = position.unsqueeze(1) < mask_right.unsqueeze(-1)
             mask = mask_left & mask_right
-            mask = mask.any(1)
+            mask = mask.any(1) # [B, l]
 
             return mask
 
         # mask T
         T_mask = _get_hard_mask(aug_param[:, :self.T_num_masks], \
                                 aug_param[:, self.T_num_masks:2*self.T_num_masks], \
-                                feat_len, feat.shape[1])
+                                feat_len, \
+                                feat.shape[1], self.max_T)
         # mask F
         F_mask = _get_hard_mask(aug_param[:, 2*self.T_num_masks:2*self.T_num_masks+self.F_num_masks], \
                                 aug_param[:, 2*self.T_num_masks+self.F_num_masks:2*self.T_num_masks+2*self.F_num_masks], \
-                                feat_len.new_tensor([feat.shape[-1]]), feat.shape[-1])
+                                feat_len.new_tensor([feat.shape[-1]]), \
+                                                      feat.shape[-1], None)
 
         total_mask = T_mask.unsqueeze(-1) | F_mask.unsqueeze(1)
         # print(total_mask)
@@ -220,17 +236,27 @@ class _TrainableAugmentModel(nn.Module):
         return feat.sum([1,2])/mask.float().sum([1,2])
 
 if __name__ == '__main__':
-    trainable_aug = _TrainableAugmentModel().cuda()
-
     batch_size = 3
     l = 20
     feat_dim = 5
     feat = torch.rand(batch_size, l, feat_dim).cuda()
     # feat_len = torch.randint(1, l-1, size=(batch_size,)).cuda()
-    feat_len = torch.tensor([l]*batch_size).cuda()
+    feat_len = torch.tensor([20,10,5]).cuda()
 
-    opt = torch.optim.SGD(trainable_aug.parameters(), lr=1)
+    # testing normal case
+    trainable_aug = _TrainableAugmentModel(T_num_masks=1).cuda()
     new_feat_soft  = trainable_aug(feat, feat_len)
+    trainable_aug.disable_trainable_aug()
+    new_feat_hard  = trainable_aug(feat, feat_len)
 
+    # testing max_T
+    trainable_aug = _TrainableAugmentModel(T_num_masks=1, max_T=l).cuda()
+    new_feat_soft  = trainable_aug(feat, feat_len)
+    trainable_aug.disable_trainable_aug()
+    new_feat_hard  = trainable_aug(feat, feat_len)
+
+    # testing if one mask is zeros
+    trainable_aug = _TrainableAugmentModel(T_num_masks=0).cuda()
+    new_feat_soft  = trainable_aug(feat, feat_len)
     trainable_aug.disable_trainable_aug()
     new_feat_hard  = trainable_aug(feat, feat_len)
