@@ -153,7 +153,7 @@ class BabelDataset(Dataset):
 
     def __getitem__(self,idx):
         return{
-            'feat':torch.as_tensor(self.feat[self.iptr[idx]:self.iptr[idx+1],:]),
+            'feat':torch.as_tensor(self.feat[self.iptr[idx]:self.iptr[idx+1],:].copy()),
             'ilen':torch.as_tensor(self.ilens[idx]),
             'label':torch.as_tensor(self.label[self.optr[idx]:self.optr[idx+1]]),
             'olen':torch.as_tensor(self.olens[idx]),

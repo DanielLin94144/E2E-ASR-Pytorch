@@ -19,7 +19,6 @@ data:
     ref_level_db: 20
     min_level_db: -100
     preemphasis_coeff: 0.97
-    augment: True
     time_aug: False
   text:
     mode: 'character'                     # 'character'/'word == phone'/'subword'
@@ -69,3 +68,32 @@ model:                                    # Model architecture
     layer: 2
     dropout: 0
 
+augmentation:
+  type: 1 # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
+
+  specaug: # arg meaning please refer to src/audio.py: class Augment # only valid if type==3
+    T: 40
+    num_masks: 1
+    replace_with_zero: False
+    F: 27
+
+  faster_search: True
+  
+  trainable_aug: # arg meaning please refer to src/augmentation.py: class TrainableAugment # only valid if type==1,2
+    model:
+      T_num_masks: 1
+      F_num_masks: 1
+      # max_T: 100 # if used, should put the longest length of the whole dataset
+      # noise_dim: 10
+      dim: [3, 3]
+      replace_with_zero: False
+      width_init_bias: -3.
+    optimizer:
+      optimizer: 'AdamW'
+      lr: 0.001
+      amsgrad: True
+    search:
+      forward_optim_method: 'sgd'
+    fast_search:
+      update_valid_frequency: 1 # the frequency of the update of valid data
+      update_valid_weight: 1. # the weight of the current step gradient

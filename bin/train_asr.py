@@ -10,6 +10,8 @@ from src.optim import Optimizer
 from src.data import load_dataset, load_wav_dataset, load_babel_dataset
 from src.util import human_format, cal_er, feat_to_fig, LabelSmoothingLoss
 from src.audio import Delta, Postprocess, Augment
+from src.augmentation import TrainableAugment
+from src.search import Search, FasterSearch
 from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
 
 EMPTY_CACHE_STEP = 100
@@ -24,6 +26,22 @@ class Solver(BaseSolver):
         self.val_mode = self.config['hparas']['val_mode'].lower()
         self.WER = 'per' if self.val_mode == 'per' else 'wer'
 
+        # put specaug config
+        if ('augmentation' in self.config):
+            if self.config['augmentation']['type'] == 3: # specaug
+                self.config['data']['audio']['augment'] = self.config['augmentation']['specaug']
+            else:
+                self.config['data']['audio']['augment'] = False
+            # only train aug for type 1
+            if self.config['augmentation']['type'] == 1:
+                self.train_aug = True
+            else:
+                self.train_aug = False
+        else:
+            self.train_aug = False
+            self.config['data']['audio']['augment'] = False
+            self.config['augmentation'] = {'type':4, 'trainable_aug':{'model':None, 'optimizer':None}}
+
     def fetch_data(self, data, train=False):
         ''' Move data to device and compute text seq. length'''
         # feat: B x T x D
@@ -33,7 +51,7 @@ class Solver(BaseSolver):
             # self.specaug.to(device)
 
             def specaug_babel(feat):
-                if train and self.config['data']['audio']['augment']:
+                if train and self.specaug:
                     feat = [self.specaug(f) for f in feat]
                     feat = pad_sequence(feat, batch_first=True)
                 return feat
@@ -63,7 +81,7 @@ class Solver(BaseSolver):
 
             def extract_feature(feat):
                 feat = self.upstream(to_device(feat))
-                if train and self.config['data']['audio']['augment'] and 'aug' not in self.paras.upstream:
+                if train and self.specaug and 'aug' not in self.paras.upstream:
                     feat = [self.specaug(f) for f in feat]
                 return feat
 
@@ -117,7 +135,11 @@ class Solver(BaseSolver):
                 force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()
-            self.specaug = Augment()
+            augment = self.config['data']['audio'].pop("augment", False)
+            if augment:
+                self.specaug = Augment(**augment)
+            else:
+                self.specaug = None
 
         elif self.paras.babel is not None:
             print(f'[Solver] - using babel dataset')
@@ -127,7 +149,11 @@ class Solver(BaseSolver):
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
-            self.specaug = Augment()
+            augment = self.config['data']['audio'].pop("augment", False)
+            if augment:
+                self.specaug = Augment(**augment)
+            else:
+                self.specaug = None
 
         else:
             self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
@@ -160,8 +186,16 @@ class Solver(BaseSolver):
         #print(self.feat_dim) #160
         batch_size = self.config['data']['corpus']['batch_size']//2
         self.model = ASR(self.feat_dim, self.vocab_size, batch_size, **self.config['model']).to(self.device)
-
-
+        self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
+                                        self.config['augmentation']['trainable_aug']['model'], \
+                                        self.config['augmentation']['trainable_aug']['optimizer']).to(self.device)
+            # create search object
+        if self.train_aug:
+            use_faster_search = self.config['augmentation'].pop('faster_search', False)
+            if use_faster_search:
+                self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['fast_search'])
+            else:
+                self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['search'])
 
         self.verbose(self.model.create_msg())
         model_paras = [{'params':self.model.parameters()}]
@@ -256,20 +290,21 @@ class Solver(BaseSolver):
                                       False, **self.config['data'])
             
             
-            for data in self.tr_set:
+            for tr_data in self.tr_set:
                 # Pre-step : update tf_rate/lr_rate and do zero_grad
                 tf_rate = self.optimizer.pre_step(self.step)
-                total_loss = 0
             
                 # Fetch data
-                feat, feat_len, txt, txt_len = self.fetch_data(data, train=True)
-            
+                feat, feat_len, txt, txt_len = self.fetch_data(tr_data, train=True)                
                 self.timer.cnt('rd')
                 # Forward model
                 # Note: txt should NOT start w/ <sos>
+                noise = self.aug_model.get_new_noise(feat)                
+                aug_feat = self.aug_model(feat, feat_len, noise=noise)
                 ctc_output, encode_len, att_output, att_align, dec_state = \
-                    self.model( feat, feat_len, max(txt_len), tf_rate=tf_rate,
+                    self.model( aug_feat, feat_len, max(txt_len), tf_rate=tf_rate,
                                     teacher=txt, get_dec_state=False)
+
                 # Clear not used objects
                 del att_align
                 del dec_state
@@ -283,6 +318,19 @@ class Solver(BaseSolver):
 
                 self.step+=1
                 
+                # train aug
+                # TODO add time counter for train aug
+                if self.train_aug:
+                    # NOT SURE: do not need to zero grad aug_model in the first
+                    dv_data = next(iter(self.dv_set))
+                    train_data = [feat, feat_len, txt, txt_len, tf_rate, stop_step]
+                    valid_data = [*self.fetch_data(dv_data), tf_rate, stop_step]
+                    self.search.unrolled_backward(train_data, valid_data, self.optimizer.opt.param_groups[0]['lr'], self.optimizer.opt, self.calc_asr_loss, noise=noise)
+                    noise = None
+                    self.aug_model.step()
+
+                    self.aug_model.optimizer_zero_grad()
+
                 # Logger
                 if (self.step==1) or (self.step%self.PROGRESS_STEP==0):
                     self.progress('Tr stat | Loss - {:.2f} | Grad. Norm - {:.2f} | {}'\
