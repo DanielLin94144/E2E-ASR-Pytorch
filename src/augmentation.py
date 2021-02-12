@@ -4,26 +4,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TrainableAugment(nn.Module): 
-    def __init__(self, aug_type, model, optimizer, max_T=None):
+    def __init__(self, aug_type, model, optimizer):
         super(TrainableAugment, self).__init__()
         self.aug_type = aug_type # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
         if self.aug_type in [3,4]:
             self.aug_model = None
             self.optimizer = None
         elif self.aug_type == 1:
-            self.aug_model = _TrainableAugmentModel(max_T=max_T, **model)
+            self.aug_model = _TrainableAugmentModel(**model)
             self.aug_model.set_trainable_aug()
             opt = getattr(torch.optim, optimizer.pop('optimizer', 'sgd'))
             self.optimizer = opt(self.aug_model.parameters(), **optimizer)
         elif self.aug_type == 2:
-            self.aug_model = _TrainableAugmentModel(max_T=max_T, **model)
+            self.aug_model = _TrainableAugmentModel(**model)
             self.aug_model.disable_trainable_aug()
             self.optimizer = None
         else:
             raise NotImplementedError
 
     def get_new_noise(self, feat):
-        return self.aug_model.get_new_noise(feat)
+        if self.aug_model is None:
+            return None
+        else:
+            return self.aug_model.get_new_noise(feat)
 
     def forward(self, feat, feat_len, noise=None):
         if self.aug_type == 1 or self.aug_type == 2:
