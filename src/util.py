@@ -48,12 +48,13 @@ class Timer():
         self.time_table['rd'] = 100*self.time_table['rd']/total_time
         self.time_table['fw'] = 100*self.time_table['fw']/total_time
         self.time_table['bw'] = 100*self.time_table['bw']/total_time
-        msg  = '{avg:.3f} sec/step (rd {rd:.1f}% | fw {fw:.1f}% | bw {bw:.1f}%)'.format(**self.time_table)
+        self.time_table['aug'] = 100*self.time_table['aug']/total_time
+        msg  = '{avg:.3f} sec/step (rd {rd:.1f}% | fw {fw:.1f}% | bw {bw:.1f}% | aug {aug:.1f}%)'.format(**self.time_table)
         self.clear()
         return msg
 
     def clear(self):
-        self.time_table = {'rd':0,'fw':0,'bw':0}
+        self.time_table = {'rd':0,'fw':0,'bw':0, 'aug':0}
         self.click = 0
 
 # Reference : https://github.com/espnet/espnet/blob/master/espnet/nets/pytorch_backend/e2e_asr.py#L168

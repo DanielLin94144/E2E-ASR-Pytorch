@@ -1,12 +1,12 @@
 data:
   corpus:                                 # Pass to dataloader
     # The following depends on corpus
-    path: '/home/darong/other_storage/MLAS-data/FLP/202-swahili/'
+    path: '/Home/daniel094144/data_folder/babel/202-swahili/'
     name: 'Babel_202'
     train_split: ['train']
     dev_split: ['dev']
     bucketing: True
-    batch_size: 16
+    batch_size: 32
 
   audio:                                  # Pass to audio transform
     feat_type: 'fbank'
@@ -72,12 +72,12 @@ augmentation:
   type: 1 # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
 
   specaug: # arg meaning please refer to src/audio.py: class Augment # only valid if type==3
-    T: 40
+    T: 15
     num_masks: 1
     replace_with_zero: False
     F: 27
 
-  faster_search: True
+  faster_search: False
   
   trainable_aug: # arg meaning please refer to src/augmentation.py: class TrainableAugment # only valid if type==1,2
     model:
@@ -85,7 +85,7 @@ augmentation:
       F_num_masks: 1
       # max_T: 100 # if used, should put the longest length of the whole dataset
       # noise_dim: 10
-      dim: [3, 3]
+      dim: [10, 10]
       replace_with_zero: False
       width_init_bias: -3.
     optimizer:
