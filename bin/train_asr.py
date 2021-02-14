@@ -189,12 +189,19 @@ class Solver(BaseSolver):
         self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
                                         self.config['augmentation']['trainable_aug']['model'], \
                                         self.config['augmentation']['trainable_aug']['optimizer']).to(self.device)
+        
+        aug_type = self.config['augmentation']['type']
+        print(f'[Augmentation INFO] - augmentation type : {aug_type}')
+    
             # create search object
         if self.train_aug:
             use_faster_search = self.config['augmentation'].pop('faster_search', False)
+
             if use_faster_search:
+                print(f'[Augmentation INFO] - use faster search : Yes')
                 self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['fast_search'])
             else:
+                print(f'[Augmentation INFO] - use faster search : No')
                 self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['search'])
 
         self.verbose(self.model.create_msg())
@@ -231,6 +238,8 @@ class Solver(BaseSolver):
 
     def calc_asr_loss(self, ctc_output, encode_len, att_output, txt, txt_len, stop_step):
         total_loss = 0
+        ctc_loss = None
+        att_loss = None
         if self.early_stoping:
             if self.step > stop_step:
                 ctc_output = None
@@ -257,7 +266,7 @@ class Solver(BaseSolver):
             # att_loss = torch.mean(torch.sum(att_loss.view(b,t),dim=-1)/torch.sum(txt!=0,dim=-1).float())
             total_loss += att_loss*(1-self.model.ctc_weight)
         
-        return total_loss
+        return total_loss, ctc_loss, att_loss
 
     def exec(self):
         ''' Training End-to-end ASR system '''
@@ -300,7 +309,7 @@ class Solver(BaseSolver):
                 # Forward model
                 # Note: txt should NOT start w/ <sos>
                 noise = self.aug_model.get_new_noise(feat)                
-                aug_feat = self.aug_model(feat, feat_len, noise=noise)
+                aug_feat = self.aug_model(feat, feat_len, noise=noise) 
                 ctc_output, encode_len, att_output, att_align, dec_state = \
                     self.model( aug_feat, feat_len, max(txt_len), tf_rate=tf_rate,
                                     teacher=txt, get_dec_state=False)
@@ -309,7 +318,7 @@ class Solver(BaseSolver):
                 del att_align
                 del dec_state
 
-                total_loss = self.calc_asr_loss(ctc_output, encode_len, att_output, txt, txt_len, stop_step)
+                total_loss, ctc_loss, att_loss = self.calc_asr_loss(ctc_output, encode_len, att_output, txt, txt_len, stop_step)
 
                 self.timer.cnt('fw')
 
@@ -330,6 +339,8 @@ class Solver(BaseSolver):
                     self.aug_model.step()
 
                     self.aug_model.optimizer_zero_grad()
+
+                self.timer.cnt('aug')
 
                 # Logger
                 if (self.step==1) or (self.step%self.PROGRESS_STEP==0):

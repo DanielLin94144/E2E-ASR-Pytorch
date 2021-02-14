@@ -38,7 +38,7 @@ class Search():
 
         # forward & calc loss
         model_output = self.model(*self._get_model_input(aug_train_data))
-        loss = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
+        loss, _, _ = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
 
         # compute gradient
         gradients = torch.autograd.grad(loss, self.model.parameters())
@@ -78,7 +78,7 @@ class Search():
 
         # calc unrolled loss
         model_output = self.v_model(*self._get_model_input(valid_data))
-        loss = get_loss_func(*self._get_calc_loss_input(valid_data, model_output)) # L_trn(w)
+        loss, _, _  = get_loss_func(*self._get_calc_loss_input(valid_data, model_output)) # L_trn(w)
 
         # compute gradient
         dw = torch.autograd.grad(loss, self.v_model.parameters())
@@ -109,7 +109,7 @@ class Search():
                 p += eps * d
         aug_train_data = self.aug_train_data(train_data)
         model_output = self.model(*self._get_model_input(aug_train_data))
-        loss = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
+        loss, _, _  = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
         dalpha_pos = torch.autograd.grad(loss, self.aug_model.parameters()) # dalpha { L_trn(w+) }
 
         # w- = w - eps*dw`
@@ -118,7 +118,7 @@ class Search():
                 p -= 2. * eps * d
         aug_train_data = self.aug_train_data(train_data)
         model_output = self.model(*self._get_model_input(aug_train_data))
-        loss = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
+        loss, _, _  = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
         dalpha_neg = torch.autograd.grad(loss, self.aug_model.parameters()) # dalpha { L_trn(w-) }
 
         # recover w
@@ -190,7 +190,7 @@ class FasterSearch():
         # calc unrolled loss
         if self.valid_counter%self.update_valid_frequency == 0: # update self.valid_gradient
             model_output = self.model(*self._get_model_input(valid_data))
-            loss = get_loss_func(*self._get_calc_loss_input(valid_data, model_output)) # L_trn(w)
+            loss, _, _  = get_loss_func(*self._get_calc_loss_input(valid_data, model_output)) # L_trn(w)
             # compute gradient
             dw = torch.autograd.grad(loss, self.model.parameters())
             # update weighted sum
@@ -232,7 +232,7 @@ class FasterSearch():
                 p += eps * d
         aug_train_data = self.aug_train_data(train_data)
         model_output = self.v_model(*self._get_model_input(aug_train_data))
-        loss = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
+        loss, _, _  = get_loss_func(*self._get_calc_loss_input(train_data, model_output)) # L_trn(w)
         dalpha_pos = torch.autograd.grad(loss, self.aug_model.parameters()) # dalpha { L_trn(w+) }
 
         hessian = [(p-n) / eps for p, n in zip(dalpha_pos, dalpha_neg)]

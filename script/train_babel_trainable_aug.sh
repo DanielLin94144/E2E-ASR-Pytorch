@@ -3,9 +3,9 @@
 # $1 : experiment name
 # $2 : cuda id
 
-CONFIG="babel_202_trainable_aug.yaml"
+CONFIG="babel_202_trainable_aug"
 
-DIR="/home/darong/other_storage/e2e_model"
+DIR="/Home/daniel094144/E2E-ASR-Pytorch/"
 
 echo "Start running training process of E2E ASR"
 CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
