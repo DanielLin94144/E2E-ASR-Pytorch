@@ -115,8 +115,8 @@ class BaseSolver():
             # Load weights
             ckpt = torch.load(self.paras.load, map_location=self.device if self.mode=='train' else 'cpu')
             self.model.load_state_dict(ckpt['model'])
-            if self.emb_decoder is not None:
-                self.emb_decoder.load_state_dict(ckpt['emb_decoder'])
+            # if self.emb_decoder is not None:
+            #     self.emb_decoder.load_state_dict(ckpt['emb_decoder'])
             #if self.amp:
             #    amp.load_state_dict(ckpt['amp'])
 
@@ -133,8 +133,8 @@ class BaseSolver():
                     if type(v) is float:
                         metric, score = k,v
                 self.model.eval()
-                if self.emb_decoder is not None:
-                    self.emb_decoder.eval()
+                # if self.emb_decoder is not None:
+                #     self.emb_decoder.eval()
                 self.verbose('Evaluation target = {} (recorded {} = {:.2f} %)'.format(self.paras.load,metric,score * 100))
 
     def verbose(self,msg):
@@ -193,8 +193,8 @@ class BaseSolver():
         # Additional modules to save
         #if self.amp:
         #    full_dict['amp'] = self.amp_lib.state_dict()
-        if self.emb_decoder is not None:
-            full_dict['emb_decoder'] = self.emb_decoder.state_dict()
+        # if self.emb_decoder is not None:
+        #     full_dict['emb_decoder'] = self.emb_decoder.state_dict()
 
         torch.save(full_dict, ckpt_path)
         if len(name) > 0:
