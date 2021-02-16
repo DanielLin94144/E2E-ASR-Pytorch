@@ -246,7 +246,7 @@ class Solver(BaseSolver):
             self.load_ckpt() # model, model optimizer, step, performance
     
         if self.paras.load_aug:
-            self.aug_model.load_ckpt(self.paras.load) # aug model 
+            self.aug_model.load_ckpt(self.paras.load_aug) # aug model 
 
 
     def calc_asr_loss(self, ctc_output, encode_len, att_output, txt, txt_len, stop_step):
@@ -418,7 +418,7 @@ class Solver(BaseSolver):
     def validate(self, _dv_set, _name):
         # Eval mode
         self.model.eval()
-        if self.emb_decoder is not None: self.emb_decoder.eval()
+        # if self.emb_decoder is not None: self.emb_decoder.eval()
         dev_wer = {'att':[],'ctc':[]}
         dev_cer = {'att':[],'ctc':[]}
         dev_er  = {'att':[],'ctc':[]}
