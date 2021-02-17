@@ -53,7 +53,7 @@ class TrainableAugment(nn.Module):
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
-    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=None, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
+    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-4.):
         '''
         noise_dim: the input noise to the generation network
         '''
@@ -61,34 +61,31 @@ class _TrainableAugmentModel(nn.Module):
         self.T_num_masks = T_num_masks
         self.F_num_masks = F_num_masks
         self.max_T = max_T # if max_T is None, the width will multiplied by each sequence length
-
-        self.output_dim = (self.T_num_masks+self.F_num_masks)*2 # position and width
-        assert(self.output_dim>0)
-        if noise_dim is None:
-            self.noise_dim = self.output_dim
-        else:
-            self.noise_dim = noise_dim
-
+        self.noise_dim = noise_dim
         self.dim = dim
         self.replace_with_zero = replace_with_zero
+        self.width_init_bias = width_init_bias
+
+        self.output_num = (self.T_num_masks+self.F_num_masks)*2 # position and width
+        assert(self.output_num>0)
 
         self.trainable_aug = True # whether this module trainable, or serve as a normal augmentation module
 
-        module_list = []
-        prev_dim = self.noise_dim
-        for d in self.dim:
-            module_list.append(nn.Linear(prev_dim, d))
-            prev_dim = d
-            module_list.append(nn.ReLU())
-        module_list.append(nn.Linear(prev_dim, self.output_dim))
-        module_list.append(nn.Sigmoid())
+        self.all_models = []  # aug_param layout [T_mask_center, T_mask_width, F_mask_center, F_mask_width] 
+        # init T_mask_center models
+        for _ in range(self.T_num_masks):
+            self.all_models.append(self._create_model(is_width=False))
+        # init T_mask_width models
+        for _ in range(self.T_num_masks):
+            self.all_models.append(self._create_model(is_width=True))
+        # init F_mask_center models
+        for _ in range(self.F_num_masks):
+            self.all_models.append(self._create_model(is_width=False))
+        # init F_mask_width models
+        for _ in range(self.F_num_masks):
+            self.all_models.append(self._create_model(is_width=True))
 
-        # init last linear 
-        # aug_param layout [T_mask_center, T_mask_width, F_mask_center, F_mask_width] 
-        # init mask width to be small 
-        module_list[-2].bias[self.T_num_masks:2*self.T_num_masks].data.fill_(width_init_bias)
-        module_list[-2].bias[(2*self.T_num_masks+self.F_num_masks):(2*self.T_num_masks+2*self.F_num_masks)].data.fill_(width_init_bias)
-        self.layers = nn.Sequential(*module_list)
+        self.all_models = nn.ModuleList(self.all_models)
 
     def set_trainable_aug(self):
         self.trainable_aug = True
@@ -96,11 +93,28 @@ class _TrainableAugmentModel(nn.Module):
     def disable_trainable_aug(self):
         self.trainable_aug = False
 
+    def _create_model(self, is_width=False):
+        module_list = []
+        prev_dim = self.noise_dim
+        for d in self.dim:
+            linear = nn.Linear(prev_dim, d)
+            nn.init.kaiming_normal_(linear.weight, nonlinearity='relu')
+            module_list.append(linear)
+            prev_dim = d
+            module_list.append(nn.ReLU())
+        module_list.append(nn.Linear(prev_dim, 1))
+        module_list.append(nn.Sigmoid())
+
+        if is_width:
+            module_list[-2].bias.data.fill_(self.width_init_bias)
+
+        return nn.Sequential(*module_list)
+
     def forward(self, feat, feat_len, noise=None):
         filling_value = 0. if self.replace_with_zero else self._get_mask_mean(feat, feat_len)
         # print('filling_value', filling_value)
         aug_param = self._generate_aug_param(feat, noise=noise)
-        # print('aug_param', aug_param)
+        print('aug_param', aug_param)
 
         if self.trainable_aug:
             return self._forward_trainable(feat, feat_len, filling_value, aug_param)
@@ -110,10 +124,33 @@ class _TrainableAugmentModel(nn.Module):
     def get_new_noise(self, feat):
         return torch.randn(feat.shape[0], self.noise_dim).to(feat.device)
 
-    def _generate_aug_param(self, feat, noise=None):
+    def _generate_aug_param(self, feat, noise=None, std=[4., 1., 4., 1.]):
+        '''
+        std: None or [T_center_input_std., T_center_input_std, F_center_input_std., F_center_input_std]
+        '''
         if noise is None:
             noise = self.get_new_noise(feat)
-        aug_param = self.layers(noise)
+        assert(len(std)==4)
+
+        output = []
+        model_idx = 0
+        # forward T_mask_center models
+        for _ in range(self.T_num_masks):
+            output.append(self.all_models[model_idx](noise*std[0])) # [B x 1]
+            model_idx += 1
+        # forward T_mask_width models
+        for _ in range(self.T_num_masks):
+            output.append(self.all_models[model_idx](noise*std[1]))
+            model_idx += 1
+        # forward F_mask_center models
+        for _ in range(self.F_num_masks):
+            output.append(self.all_models[model_idx](noise*std[2]))
+            model_idx += 1
+        # forward F_mask_width models
+        for _ in range(self.F_num_masks):
+            output.append(self.all_models[model_idx](noise*std[3]))
+            model_idx += 1
+        aug_param = torch.cat(output, -1)
         return aug_param # [B, 2*(T_num_masks+F_num_masks)]
 
     def _forward_trainable(self, feat, feat_len, filling_value, aug_param):
@@ -247,19 +284,19 @@ if __name__ == '__main__':
     feat_len = torch.tensor([20,10,5]).cuda()
 
     # testing normal case
-    trainable_aug = _TrainableAugmentModel(T_num_masks=1).cuda()
+    trainable_aug = _TrainableAugmentModel(T_num_masks=1, noise_dim=100).cuda()
     new_feat_soft  = trainable_aug(feat, feat_len)
     trainable_aug.disable_trainable_aug()
     new_feat_hard  = trainable_aug(feat, feat_len)
 
     # testing max_T
-    trainable_aug = _TrainableAugmentModel(T_num_masks=1, max_T=l).cuda()
+    trainable_aug = _TrainableAugmentModel(T_num_masks=1, max_T=l, noise_dim=100).cuda()
     new_feat_soft  = trainable_aug(feat, feat_len)
     trainable_aug.disable_trainable_aug()
     new_feat_hard  = trainable_aug(feat, feat_len)
 
     # testing if one mask is zeros
-    trainable_aug = _TrainableAugmentModel(T_num_masks=0).cuda()
+    trainable_aug = _TrainableAugmentModel(T_num_masks=0, noise_dim=100).cuda()
     new_feat_soft  = trainable_aug(feat, feat_len)
     trainable_aug.disable_trainable_aug()
     new_feat_hard  = trainable_aug(feat, feat_len)
