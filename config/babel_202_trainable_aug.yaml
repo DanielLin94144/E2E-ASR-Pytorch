@@ -6,7 +6,7 @@ data:
     train_split: ['train']
     dev_split: ['dev']
     bucketing: True
-    batch_size: 32
+    batch_size: 32 # a little smaller batch_size for adadelta
 
   audio:                                  # Pass to audio transform
     feat_type: 'fbank'
@@ -93,7 +93,8 @@ augmentation:
       lr: 0.001
       amsgrad: True
     search:
-      forward_optim_method: 'sgd'
+      lr_ratio: 1.
+      forward_optim_method: 'adadelta' # sgd, adadelta
     fast_search:
       update_valid_frequency: 1 # the frequency of the update of valid data
       update_valid_weight: 1. # the weight of the current step gradient

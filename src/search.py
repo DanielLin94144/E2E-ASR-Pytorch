@@ -3,7 +3,7 @@ import torch
 
 class Search():
     """ Compute gradients of alphas """
-    def __init__(self, model, aug_model, model_optim_parameter, forward_optim_method='sgd'):
+    def __init__(self, model, aug_model, model_optim_parameter, lr_ratio=1., forward_optim_method='sgd'):
         """
         Args:
             model
@@ -18,6 +18,7 @@ class Search():
         #self.w_weight_decay = w_weight_decay
 
         self.aug_model = aug_model
+        self.lr_ratio = lr_ratio
         self.forward_optim_method = forward_optim_method # the method to do virtual step
 
     def virtual_step(self, train_data, model_lr, model_optim, get_loss_func):
@@ -45,15 +46,19 @@ class Search():
 
         # do virtual step (update gradient)
         # below operations do not need gradient tracking
-        with torch.no_grad():
+        all_backward_g = []
             # dict key is not the value, but the pointer. So original modelwork weight have to
             # be iterated also.
-            for w, vw, g in zip(self.model.parameters(), self.v_model.parameters(), gradients):
-                # m = model_optim.state[w].get('momentum_buffer', 0.) * self.w_momentum
-                # vw.copy_(w - model_lr * (m + g + self.w_weight_decay*w))
-                # TODO: consider other optimization process # here use SGD
-                vw.copy_(w - model_lr * eval(self.forward_optim_method+"_forward")(w, g, model_optim, self.model_optim_parameter))
+        for w, vw, g in zip(self.model.parameters(), self.v_model.parameters(), gradients):
+            # m = model_optim.state[w].get('momentum_buffer', 0.) * self.w_momentum
+            # vw.copy_(w - model_lr * (m + g + self.w_weight_decay*w))
+            # TODO: consider other optimization process # here use SGD
+            forward_g, backward_g = eval(self.forward_optim_method+"_forward_backward")(w, g, model_optim, self.model_optim_parameter)
+            all_backward_g.append(backward_g)
+            with torch.no_grad():
+                vw.copy_(w - model_lr * forward_g)
                 # TODO add backward method here
+        return tuple(all_backward_g)
 
     def aug_train_data(self, train_data):
         """ do augmentation on train data
@@ -74,14 +79,19 @@ class Search():
         self.noise = self.aug_model.get_new_noise(train_data[0]) # make the noise be consistent over the whole process
 
         # do virtual step (calc w`)
-        self.virtual_step(train_data, model_lr, model_optim, get_loss_func)
+        all_backward_g = self.virtual_step(train_data, model_lr*self.lr_ratio, model_optim, get_loss_func)
 
         # calc unrolled loss
         model_output = self.v_model(*self._get_model_input(valid_data))
         loss, _, _  = get_loss_func(*self._get_calc_loss_input(valid_data, model_output)) # L_trn(w)
 
         # compute gradient
-        dw = torch.autograd.grad(loss, self.v_model.parameters())
+        dw = list(torch.autograd.grad(loss, self.v_model.parameters()))
+        with torch.no_grad():
+            for backward_g, d in zip(all_backward_g, dw):
+                d *= backward_g
+        del all_backward_g
+        dw = tuple(dw)
 
         hessian = self.compute_hessian(dw, train_data, get_loss_func)
 
@@ -247,15 +257,25 @@ class FasterSearch():
         ctc_output, encode_len, att_output, att_align, dec_state = model_output
         return [ctc_output, encode_len, att_output, txt, txt_len, stop_step]
 
-def sgd_forward(w, g, model_optim, model_optim_parameter):
-    return g
+def sgd_forward_backward(w, g, model_optim, model_optim_parameter):
+    return g, g.new_tensor(1.).detach()
 
-# def sgd_backward(w, g, model_optim, model_optim_parameter):
-#     return 1
+def momentum_forward_backward(w, g, model_optim, model_optim_parameter):
+    weight_decay = model_optim_parameter.get('weight_decay', 0.) 
+    m = model_optim.state[w].get('momentum_buffer', 0.) * model_optim_parameter['w_momentum'] # there must be w_momentum in model_optim_parameter
+    return m + g + weight_decay*w, g.new_tensor(1.).detach()
 
-def momentum_forward(w, g, model_optim, model_optim_parameter):
-    m = model_optim.state[w].get('momentum_buffer', 0.) * model_optim_parameter['w_momentum']
-    return m + g + model_optim_parameter['w_weight_decay']*w
-    
-# def momentum_backward(w, g, model_optim, model_optim_parameter):
-#     return 1
+def adadelta_forward_backward(w, g, model_optim, model_optim_parameter):
+    # ref: https://pytorch.org/docs/stable/_modules/torch/optim/adadelta.html#Adadelta
+    rho = model_optim_parameter.get('rho', 0.9) # 0.9 is pytorch default value
+    eps = model_optim_parameter.get('eps', 1e-6,) 
+    weight_decay = model_optim_parameter.get('weight_decay', 0.) 
+
+    grad = torch.tensor(g, requires_grad=True)
+    x = grad
+    if weight_decay != 0:
+        x = x.add(w, alpha=weight_decay)
+    square_avg = model_optim.state[w].get('square_avg', 0.).mul(rho).addcmul(x, x, value=1 - rho)
+    std = square_avg.add(eps).sqrt()
+    x = model_optim.state[w].get('acc_delta', 0.).add(eps).sqrt_().div(std).mul(grad)
+    return x, torch.autograd.grad(x.sum(), grad)[0].detach()
