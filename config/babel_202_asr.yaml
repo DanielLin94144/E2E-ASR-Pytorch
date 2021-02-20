@@ -31,7 +31,7 @@ hparas:                                   # Experiment hyper-parameters
   tf_start: 1.0
   tf_end: 1.0
   tf_step: 150000
-  optimizer: 'Adadelta'
+  optimizer: 'sgd'
   lr: 1
   eps: 0.00000001                          # 1e-8
   lr_scheduler: 'fixed'                    # 'fixed'/'warmup'

@@ -84,13 +84,13 @@ augmentation:
       T_num_masks: 1
       F_num_masks: 1
       # max_T: 100 # if used, should put the longest length of the whole dataset
-      # noise_dim: 10
+      noise_dim: 10
       dim: [10, 10]
       replace_with_zero: False
       width_init_bias: -3.
     optimizer:
       optimizer: 'AdamW'
-      lr: 0.001
+      lr: 0.0005
       amsgrad: True
     search:
       forward_optim_method: 'sgd'

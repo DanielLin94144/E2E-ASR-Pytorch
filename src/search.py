@@ -52,7 +52,11 @@ class Search():
                 # m = model_optim.state[w].get('momentum_buffer', 0.) * self.w_momentum
                 # vw.copy_(w - model_lr * (m + g + self.w_weight_decay*w))
                 # TODO: consider other optimization process # here use SGD
-                vw.copy_(w - model_lr * eval(self.forward_optim_method+"_forward")(w, g, model_optim, self.model_optim_parameter))
+                """
+                mismatch lr between adadelta and sgd
+                sgd_lr = adadelta*0.1
+                """
+                vw.copy_(w - 0.1 * model_lr * eval(self.forward_optim_method+"_forward")(w, g, model_optim, self.model_optim_parameter))
                 # TODO add backward method here
 
     def aug_train_data(self, train_data):

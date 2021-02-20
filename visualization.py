@@ -8,7 +8,7 @@ import matplotlib
 
 if __name__ == '__main__':
     yaml_path = '/Home/daniel094144/E2E-ASR-Pytorch/config/babel_202_trainable_aug.yaml'
-    ckpt_path = '/Home/daniel094144/E2E-ASR-Pytorch/ckpt/nofast_init/best_aug.pth'
+    ckpt_path = '/Home/daniel094144/E2E-ASR-Pytorch/ckpt/nofast_adamw_5e-4/best_aug.pth'
 
     config = yaml.load(open(yaml_path,'r'), Loader=yaml.FullLoader)
 
@@ -40,9 +40,9 @@ if __name__ == '__main__':
     feat = np.transpose(feat)
     new_feat = np.transpose(new_feat)
 
-    os.makedirs('./demo', exist_ok=True)
-    matplotlib.image.imsave('./demo/feat.png', feat)
-    matplotlib.image.imsave('./demo/new_feat.png', new_feat)
+    os.makedirs('./demo/adamw_5e-4/', exist_ok=True)
+    matplotlib.image.imsave('./demo/adamw_5e-4/feat8000-1.png', feat)
+    matplotlib.image.imsave('./demo/adamw_5e-4/new_feat8000-1.png', new_feat)
 
 
         

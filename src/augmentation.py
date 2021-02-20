@@ -53,7 +53,7 @@ class TrainableAugment(nn.Module):
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
-    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-4.):
+    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
         '''
         noise_dim: the input noise to the generation network
         '''
@@ -102,6 +102,7 @@ class _TrainableAugmentModel(nn.Module):
             module_list.append(linear)
             prev_dim = d
             module_list.append(nn.ReLU())
+            
         module_list.append(nn.Linear(prev_dim, 1))
         module_list.append(nn.Sigmoid())
 

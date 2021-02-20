@@ -25,6 +25,8 @@ class Optimizer():
             self.lr_scheduler = None
             if optimizer.lower()[:4] == 'adam':
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay,amsgrad=amsgrad) # ToDo: 1e-8 better?
+            elif optimizer.lower()[:3] == 'sgd':
+                self.opt = opt(parameters, lr=lr)
             else:
                 self.opt = opt(parameters,lr=lr,eps=eps,weight_decay=weight_decay) # ToDo: 1e-8 better?
 
