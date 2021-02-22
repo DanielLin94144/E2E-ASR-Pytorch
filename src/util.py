@@ -135,7 +135,7 @@ def cal_er(tokenizer, pred, truth, mode='wer', ctc=False):
         if mode == 'wer' or mode == 'per':
             p = p.split(' ')
             t = t.split(' ')
-        error = 1. if len(t) == 0 else float(ed.eval(p,t))/len(t)
+        error = 1. if len(t) == 0 else float(ed.eval(p,t))/len(t) # maybe not work for babel
         er.append(error)
     return sum(er)/len(er)
 

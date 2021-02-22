@@ -445,13 +445,13 @@ class Solver(BaseSolver):
                 self.save_checkpoint('best_{}_{}.pth'.format(task, _name + (self.save_name if self.transfer_learning else '')), 
                                     self.val_mode,dev_er[task],_name)
                 # save aug model ckpt 
-                if self.config['augmentation']['type'] != 4:
+                if self.config['augmentation']['type'] != 4 and self.config['augmentation']['type'] != 3:
                     self.aug_model.save_ckpt(self.ckpdir+'/best_aug.pth')
 
             if self.step >= self.max_step:
                 self.save_checkpoint('last_{}_{}.pth'.format(task, _name + (self.save_name if self.transfer_learning else '')), 
                                     self.val_mode,dev_er[task],_name)
-                if self.config['augmentation']['type'] != 4:
+                if self.config['augmentation']['type'] != 4 and self.config['augmentation']['type'] != 3:
                     self.aug_model.save_ckpt(self.ckpdir+'/last_aug.pth')
 
             self.write_log(self.WER,{'dv_'+task+'_'+_name.lower():dev_wer[task]})

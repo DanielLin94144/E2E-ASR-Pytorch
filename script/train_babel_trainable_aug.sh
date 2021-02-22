@@ -18,4 +18,5 @@ CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \
     --reserve_gpu 0 \
     --babel babel \
     --no_cudnn \
+    # --load_aug /Home/daniel094144/E2E-ASR-Pytorch/ckpt/nofast_sgd0.1lr_-3/best_aug.pth
 

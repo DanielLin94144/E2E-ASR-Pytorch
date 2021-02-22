@@ -43,13 +43,17 @@ class TrainableAugment(nn.Module):
         if ckpt_path and os.path.isfile(ckpt_path):
             ckpt = torch.load(ckpt_path)
             self.aug_model.load_state_dict(ckpt['aug_model'])
-            self.optimizer.load_state_dict(ckpt['aug_optimizer'])
+            if  self.aug_type == 1:
+                self.optimizer.load_state_dict(ckpt['aug_optimizer'])
 
     def save_ckpt(self, ckpt_path):
-        full_dict = {
-            "aug_model": self.aug_model.state_dict(),
-            "aug_optimizer": self.optimizer.state_dict()
-        }
+        if  self.aug_type == 1:
+            full_dict = {
+                "aug_model": self.aug_model.state_dict(),
+                "aug_optimizer": self.optimizer.state_dict()
+            }
+        else: 
+            full_dict = {"aug_model": self.aug_model.state_dict()}
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
