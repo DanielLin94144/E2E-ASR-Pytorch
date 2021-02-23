@@ -312,7 +312,7 @@ class Solver(BaseSolver):
                 # Backprop
                 grad_norm = self.backward(total_loss)             
 
-                self.step+=1
+                
                 
                 # train aug
                 # TODO add time counter for train aug
@@ -324,10 +324,16 @@ class Solver(BaseSolver):
                     self.search.unrolled_backward(train_data, valid_data, self.optimizer.opt.param_groups[0]['lr'], self.optimizer.opt, self.calc_asr_loss, noise=noise)
                     noise = None
                     self.aug_model.step()
-
                     self.aug_model.optimizer_zero_grad()
 
+                    self.aug_model.aug_model.set_step(self.step)
+                    
+                    if self.step % self.valid_step == 0: 
+                        print(f'[INFO] - sigmoid threshold = {self.aug_model.aug_model.SIGMOID_THRESHOLD} @ step {self.step}')
+
                 self.timer.cnt('aug')
+
+                self.step+=1
 
                 # Logger
                 if (self.step==1) or (self.step%self.PROGRESS_STEP==0):

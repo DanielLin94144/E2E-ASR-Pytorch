@@ -22,6 +22,8 @@ class TrainableAugment(nn.Module):
         else:
             raise NotImplementedError
 
+
+
     def get_new_noise(self, feat):
         if self.aug_model is None:
             return None
@@ -74,8 +76,8 @@ class _TrainableAugmentModel(nn.Module):
         self.max_sigmoid_threshold = max_sigmoid_threshold
         self.init_sigmoid_threshold = init_sigmoid_threshold
         self.slope = (self.max_sigmoid_threshold-self.init_sigmoid_threshold)/self.max_step
-        
         self.step = 0
+
 
         self.output_num = (self.T_num_masks+self.F_num_masks)*2 # position and width
         assert(self.output_num>0)
@@ -165,6 +167,9 @@ class _TrainableAugmentModel(nn.Module):
         aug_param = torch.cat(output, -1)
         return aug_param # [B, 2*(T_num_masks+F_num_masks)]
 
+    def set_step(self, step): 
+        self.step = step
+
     def sigmoid_threshold_scheduler(self):
         '''
         linearly ascend SIGMOID_THRESHOLD from 5 to max_sigmoid_threshold according to max_step
@@ -173,9 +178,6 @@ class _TrainableAugmentModel(nn.Module):
         self.max_sigmoid_threshold
         '''
         curr_sigmoid_threshold = self.init_sigmoid_threshold + self.step * self.slope
-        self.step = self.step + 1
-        if self.step % 2000 == 0: 
-            print(f'[INFO] - at {self.step}, sigmoid threshold = {curr_sigmoid_threshold}')
 
         return curr_sigmoid_threshold
         
@@ -194,7 +196,7 @@ class _TrainableAugmentModel(nn.Module):
 
             output: [B, l]
             '''
-            SIGMOID_THRESHOLD = self.sigmoid_threshold_scheduler() # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
+            self.SIGMOID_THRESHOLD = self.sigmoid_threshold_scheduler() # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
             device = mask_center.device
 
             position = torch.arange(start=0, end=padding_len, device=device).unsqueeze(0) # [1, l]
@@ -204,7 +206,7 @@ class _TrainableAugmentModel(nn.Module):
             mask_width_recover = mask_width*max_len if max_len else mask_width*length.unsqueeze(-1)  # [B, num_mask]
             abs_ratio = torch.abs(dist_to_center)/mask_width_recover.unsqueeze(-1) # [B, num_mask, l]
 
-            log_mask_weight = F.logsigmoid((abs_ratio*(2*SIGMOID_THRESHOLD))-SIGMOID_THRESHOLD) # [B, num_mask, l]
+            log_mask_weight = F.logsigmoid((abs_ratio*(2*self.SIGMOID_THRESHOLD))-self.SIGMOID_THRESHOLD) # [B, num_mask, l]
             log_mask_weight = log_mask_weight.sum(1) # [B, l]
             return log_mask_weight
 
