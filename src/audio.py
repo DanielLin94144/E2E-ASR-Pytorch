@@ -379,6 +379,9 @@ class Augment(nn.Module):
         
         for i in range(0, num_masks):
             t = torch.randint(0, self.T, (1,)).item()
+            if len_spectro-t < 1: 
+                t = len_spectro-1
+            # len_spectro - t must be at least larger than 1
             t_zero = torch.randint(0, len_spectro-t, (1,)).item()
             # avoids randrange error if values are equal and range is empty
             if (t_zero == t_zero + t): return cloned
