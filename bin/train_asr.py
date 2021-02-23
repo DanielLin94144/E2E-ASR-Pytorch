@@ -135,7 +135,7 @@ class Solver(BaseSolver):
             print(f'[Solver] - using babel dataset')
             self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg = \
                             load_babel_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
-                                        self.curriculum>0,
+                                        self.curriculum>0, self.config['augmentation']['trainable_aug']['model']['max_T'],
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
@@ -189,10 +189,10 @@ class Solver(BaseSolver):
             use_faster_search = self.config['augmentation'].pop('faster_search', False)
 
             if use_faster_search:
-                print(f'[Augmentation INFO] - use faster search : Yes')
+                print('[Augmentation INFO] - use faster search : Yes')
                 self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['fast_search'])
             else:
-                print(f'[Augmentation INFO] - use faster search : No')
+                print('[Augmentation INFO] - use faster search : No')
                 self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['search'])
 
         self.verbose(self.model.create_msg())

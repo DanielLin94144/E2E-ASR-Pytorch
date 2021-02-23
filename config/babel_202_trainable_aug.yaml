@@ -27,10 +27,10 @@ data:
 
 hparas:                                   # Experiment hyper-parameters
   valid_step: 2000
-  max_step: 200000
+  max_step: 80000
   tf_start: 1.0
   tf_end: 1.0
-  tf_step: 150000
+  tf_step: 80000
   optimizer: 'Adadelta'
   lr: 1
   eps: 0.00000001                          # 1e-8
@@ -83,11 +83,14 @@ augmentation:
     model:
       T_num_masks: 1
       F_num_masks: 1
-      # max_T: 100 # if used, should put the longest length of the whole dataset
+      max_T: False
       noise_dim: 10
       dim: [10, 10]
       replace_with_zero: False
       width_init_bias: -3.
+      init_sigmoid_threshold: 5
+      max_sigmoid_threshold: 15
+      max_step: 80000
     optimizer:
       optimizer: 'AdamW'
       lr: 0.001

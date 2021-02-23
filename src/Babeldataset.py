@@ -158,9 +158,12 @@ class BabelDataset(Dataset):
             'label':torch.as_tensor(self.label[self.optr[idx]:self.optr[idx+1]]),
             'olen':torch.as_tensor(self.olens[idx]),
         }
+    def get_max_len(self):
+        print(self.feat.shape)
+        return 
 
 
-def get_loader(data_dir, batch_size, is_memmap, is_bucket, num_workers=0, 
+def get_loader(data_dir, batch_size, is_memmap, is_bucket, max_T, num_workers=0, 
                min_ilen=None, max_ilen=None, half_batch_ilen=None, 
                bucket_reverse=False, shuffle=True, read_file=False, 
                drop_last=False, pin_memory=True):
@@ -191,8 +194,21 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, num_workers=0,
         loader = DataLoader(dset, batch_size=batch_size, num_workers=num_workers,
                             collate_fn=collate_fn, shuffle=shuffle,
                             drop_last=drop_last, pin_memory=pin_memory)
+    max_feat_len = None
 
-    return loader, len(dset)
+    if max_T: 
+        max_feat_len = 0
+        for data in loader:
+            feat, _, _, _ = data
+            # print(feat.shape)
+            feat_len = feat.shape[1]
+            if feat_len > max_feat_len: 
+                max_feat_len = feat_len
+        print(max_feat_len)
+
+    return loader, len(dset), max_feat_len
+
+
 
 # class DataContainer:
 #     def __init__(self, data_dirs, batch_size, dev_batch_size, is_memmap, 
@@ -273,12 +289,17 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, num_workers=0,
 
 #         return ret_ls
 
-# if __name__ == "__main__":
-#     data_dir = '/Home/daniel094144/data_folder/babel/202-swahili/dev/'
-
-#     loader = get_loader(data_dir, is_bucket = True, batch_size=1, is_memmap=True, num_workers=16)
-
-#     for data in loader:
-#         # print(data['feat'])
-#         print(data[0].shape)
-#         print(data[1])
+if __name__ == "__main__":
+    data_dir = '/Home/daniel094144/data_folder/babel/202-swahili/dev/'
+    # dset = BabelDataset(data_dir, is_memmap=True)
+    # dset.get_max_len()
+    loader, dataset_len = get_loader(data_dir, is_bucket = True, batch_size=1, is_memmap=True, num_workers=16)
+    max_feat_len = 0
+    for data in loader:
+        feat, _, _, _ = data
+        # print(feat.shape)
+        feat_len = feat.shape[1]
+        if feat_len > max_feat_len: 
+            max_feat_len = feat_len
+    print(max_feat_len)
+    

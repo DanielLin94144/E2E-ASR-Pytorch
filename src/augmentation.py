@@ -57,7 +57,8 @@ class TrainableAugment(nn.Module):
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
-    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], replace_with_zero=False, width_init_bias=-3.):
+    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], \
+    replace_with_zero=False, width_init_bias=-3., init_sigmoid_threshold=5, max_sigmoid_threshold=15, max_step = 80000):
         '''
         noise_dim: the input noise to the generation network
         '''
@@ -69,6 +70,12 @@ class _TrainableAugmentModel(nn.Module):
         self.dim = dim
         self.replace_with_zero = replace_with_zero
         self.width_init_bias = width_init_bias
+        self.max_step = max_step
+        self.max_sigmoid_threshold = max_sigmoid_threshold
+        self.init_sigmoid_threshold = init_sigmoid_threshold
+        self.slope = (self.max_sigmoid_threshold-self.init_sigmoid_threshold)/self.max_step
+        
+        self.step = 0
 
         self.output_num = (self.T_num_masks+self.F_num_masks)*2 # position and width
         assert(self.output_num>0)
@@ -119,7 +126,7 @@ class _TrainableAugmentModel(nn.Module):
         filling_value = 0. if self.replace_with_zero else self._get_mask_mean(feat, feat_len)
         # print('filling_value', filling_value)
         aug_param = self._generate_aug_param(feat, noise=noise)
-        print('aug_param', aug_param)
+        # print('aug_param', aug_param)
 
         if self.trainable_aug:
             return self._forward_trainable(feat, feat_len, filling_value, aug_param)
@@ -158,6 +165,20 @@ class _TrainableAugmentModel(nn.Module):
         aug_param = torch.cat(output, -1)
         return aug_param # [B, 2*(T_num_masks+F_num_masks)]
 
+    def sigmoid_threshold_scheduler(self):
+        '''
+        linearly ascend SIGMOID_THRESHOLD from 5 to max_sigmoid_threshold according to max_step
+        
+        self.max_step
+        self.max_sigmoid_threshold
+        '''
+        curr_sigmoid_threshold = self.init_sigmoid_threshold + self.step * self.slope
+        self.step = self.step + 1
+        if self.step % 2000 == 0: 
+            print(f'[INFO] - at {self.step}, sigmoid threshold = {curr_sigmoid_threshold}')
+
+        return curr_sigmoid_threshold
+        
     def _forward_trainable(self, feat, feat_len, filling_value, aug_param):
         '''
         filling_value: [B]
@@ -173,7 +194,7 @@ class _TrainableAugmentModel(nn.Module):
 
             output: [B, l]
             '''
-            SIGMOID_THRESHOLD = 5 # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
+            SIGMOID_THRESHOLD = self.sigmoid_threshold_scheduler() # assume 2*SIGMOID_THRESHOLD is the width, because sigmoid(SIGMOID_THRESHOLD) starts to very close to 1
             device = mask_center.device
 
             position = torch.arange(start=0, end=padding_len, device=device).unsqueeze(0) # [1, l]
