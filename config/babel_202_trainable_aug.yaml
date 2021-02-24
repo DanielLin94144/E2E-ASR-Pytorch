@@ -83,7 +83,7 @@ augmentation:
     model:
       T_num_masks: 1
       F_num_masks: 1
-      max_T: False
+      is_max_T: True
       noise_dim: 10
       dim: [10, 10]
       replace_with_zero: False

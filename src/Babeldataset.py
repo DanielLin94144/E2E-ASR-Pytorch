@@ -163,7 +163,7 @@ class BabelDataset(Dataset):
         return 
 
 
-def get_loader(data_dir, batch_size, is_memmap, is_bucket, max_T, num_workers=0, 
+def get_loader(data_dir, batch_size, is_memmap, is_bucket, is_max_T, num_workers=0, 
                min_ilen=None, max_ilen=None, half_batch_ilen=None, 
                bucket_reverse=False, shuffle=True, read_file=False, 
                drop_last=False, pin_memory=True):
@@ -196,7 +196,7 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, max_T, num_workers=0,
                             drop_last=drop_last, pin_memory=pin_memory)
     max_feat_len = None
 
-    if max_T: 
+    if is_max_T: 
         max_feat_len = 0
         for data in loader:
             feat, _, _, _ = data
@@ -204,7 +204,7 @@ def get_loader(data_dir, batch_size, is_memmap, is_bucket, max_T, num_workers=0,
             feat_len = feat.shape[1]
             if feat_len > max_feat_len: 
                 max_feat_len = feat_len
-        print(max_feat_len)
+        
 
     return loader, len(dset), max_feat_len
 

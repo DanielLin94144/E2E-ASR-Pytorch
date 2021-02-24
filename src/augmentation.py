@@ -4,19 +4,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class TrainableAugment(nn.Module): 
-    def __init__(self, aug_type, model, optimizer):
+    def __init__(self, aug_type, model, optimizer, max_T):
         super(TrainableAugment, self).__init__()
         self.aug_type = aug_type # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
+        self.max_T = max_T
         if self.aug_type in [3,4]:
             self.aug_model = None
             self.optimizer = None
         elif self.aug_type == 1:
-            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model = _TrainableAugmentModel(self.max_T, **model)
             self.aug_model.set_trainable_aug()
             opt = getattr(torch.optim, optimizer.pop('optimizer', 'sgd'))
             self.optimizer = opt(self.aug_model.parameters(), **optimizer)
         elif self.aug_type == 2:
-            self.aug_model = _TrainableAugmentModel(**model)
+            self.aug_model = _TrainableAugmentModel(self.max_T, **model)
             self.aug_model.disable_trainable_aug()
             self.optimizer = None
         else:
@@ -59,7 +60,7 @@ class TrainableAugment(nn.Module):
         torch.save(full_dict, ckpt_path)
 
 class _TrainableAugmentModel(nn.Module):
-    def __init__(self, T_num_masks=1, F_num_masks=1, max_T=None, noise_dim=10, dim=[10, 10, 10], \
+    def __init__(self, max_T=0, T_num_masks=1, F_num_masks=1, is_max_T=None, noise_dim=10, dim=[10, 10, 10], \
     replace_with_zero=False, width_init_bias=-3., init_sigmoid_threshold=5, max_sigmoid_threshold=15, max_step = 80000):
         '''
         noise_dim: the input noise to the generation network
@@ -67,7 +68,9 @@ class _TrainableAugmentModel(nn.Module):
         super(_TrainableAugmentModel, self).__init__()
         self.T_num_masks = T_num_masks
         self.F_num_masks = F_num_masks
-        self.max_T = max_T # if max_T is None, the width will multiplied by each sequence length
+        self.is_max_T = is_max_T # if max_T is None, the width will multiplied by each sequence length
+        self.max_T = max_T 
+
         self.noise_dim = noise_dim
         self.dim = dim
         self.replace_with_zero = replace_with_zero

@@ -200,7 +200,7 @@ def load_textset(n_jobs, use_gpu, pin_memory, corpus, text):
     return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg
 
 "support for babel dataset"
-def load_babel_dataset(n_jobs, use_gpu, pin_memory, ascending, max_T, corpus, audio, text):
+def load_babel_dataset(n_jobs, use_gpu, pin_memory, ascending, is_max_T, corpus, audio, text):
     # Text tokenizer
     tokenizer = load_text_encoder(**text)
 
@@ -208,14 +208,16 @@ def load_babel_dataset(n_jobs, use_gpu, pin_memory, ascending, max_T, corpus, au
     dv_data_dir = corpus['path']+corpus['dev_split'][0]+'/'
 
     tr_set, tr_dataset_len, tr_max_T = get_loader(tr_data_dir, is_bucket = corpus['bucketing'], batch_size=corpus['batch_size'], \
-                                                is_memmap=True, num_workers=n_jobs, max_T = max_T)
+                                                is_memmap=True, num_workers=n_jobs, is_max_T = is_max_T)
     dv_set, dv_dataset_len, dv_max_T = get_loader(dv_data_dir, is_bucket = False, batch_size=corpus['batch_size'], \
-                                                is_memmap=True, num_workers=n_jobs, shuffle=False, drop_last=False,  max_T = max_T)
+                                                is_memmap=True, num_workers=n_jobs, shuffle=False, drop_last=False,  is_max_T = is_max_T)
 
     data_msg = _data_msg(corpus['name'], corpus['path'], corpus['train_split'].__str__(),tr_dataset_len,
                              corpus['dev_split'].__str__(), dv_dataset_len, corpus['batch_size'], corpus['bucketing'])
     
-    return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg
+    print(f'[INFO] - the maximum length in the training set is {tr_max_T}')
+
+    return tr_set, dv_set, tokenizer.vocab_size, tokenizer, data_msg, tr_max_T # use training set max len as max_T
 
 
 

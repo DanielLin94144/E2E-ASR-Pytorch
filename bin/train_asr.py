@@ -25,7 +25,7 @@ class Solver(BaseSolver):
         self.curriculum = self.config['hparas']['curriculum']
         self.val_mode = self.config['hparas']['val_mode'].lower()
         self.WER = 'per' if self.val_mode == 'per' else 'wer'
-        
+        self.max_T = None
 
         # put specaug config
         if ('augmentation' in self.config):
@@ -133,9 +133,9 @@ class Solver(BaseSolver):
 
         elif self.paras.babel is not None:
             print(f'[Solver] - using babel dataset')
-            self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg = \
+            self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg, self.max_T= \
                             load_babel_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
-                                        self.curriculum>0, self.config['augmentation']['trainable_aug']['model']['max_T'],
+                                        self.curriculum>0, self.config['augmentation']['trainable_aug']['model']['is_max_T'],
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
@@ -178,7 +178,7 @@ class Solver(BaseSolver):
         self.model = ASR(self.feat_dim, self.vocab_size, batch_size, **self.config['model']).to(self.device)
         self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
                                         self.config['augmentation']['trainable_aug']['model'], \
-                                        self.config['augmentation']['trainable_aug']['optimizer']).to(self.device)
+                                        self.config['augmentation']['trainable_aug']['optimizer'], self.max_T).to(self.device)
         
         
         aug_type = self.config['augmentation']['type']
