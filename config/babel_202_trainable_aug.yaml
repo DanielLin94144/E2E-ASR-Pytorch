@@ -83,6 +83,11 @@ augmentation:
     model:
       T_num_masks: 1
       F_num_masks: 1
+      T_position_trainable: True # if false, only use random sample as center
+      F_position_trainable: True
+      generated_width: True # if false, only train single value as width
+      random_sample_width: False # if True, multiply a random number on width
+      use_bn: False # use bn in the generated network
       is_max_T: True
       noise_dim: 10
       dim: [10, 10]

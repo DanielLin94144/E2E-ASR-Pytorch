@@ -287,6 +287,9 @@ class Solver(BaseSolver):
             
             
             for tr_data in self.tr_set:
+                # set aug model step
+                self.aug_model.set_step(self.step)
+
                 # Pre-step : update tf_rate/lr_rate and do zero_grad
                 tf_rate = self.optimizer.pre_step(self.step)
             
@@ -325,11 +328,9 @@ class Solver(BaseSolver):
                     noise = None
                     self.aug_model.step()
                     self.aug_model.optimizer_zero_grad()
-
-                    self.aug_model.aug_model.set_step(self.step)
                     
                     if self.step % self.valid_step == 0: 
-                        print(f'[INFO] - sigmoid threshold = {self.aug_model.aug_model.SIGMOID_THRESHOLD} @ step {self.step}')
+                        print(f'[INFO] - sigmoid threshold = {self.aug_model.get_sigmoid_threshold()} @ step {self.step}')
 
                 self.timer.cnt('aug')
 
