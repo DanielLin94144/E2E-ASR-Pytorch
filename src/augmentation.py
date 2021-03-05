@@ -66,6 +66,8 @@ class TrainableAugment(nn.Module):
         else: 
             full_dict = {"aug_model": self.aug_model.state_dict()}
         torch.save(full_dict, ckpt_path)
+    def sampling_width(self):
+        return self.aug_model._sampling_width()
 
 class _TrainableAugmentModel(nn.Module):
     def __init__(self, max_T=0, T_num_masks=1, F_num_masks=1, T_position_trainable=True, F_position_trainable=True, generated_width=True, random_sample_width=False,  noise_dim=10, dim=[10, 10, 10], use_bn=False, \
@@ -87,7 +89,7 @@ class _TrainableAugmentModel(nn.Module):
         self.init_sigmoid_threshold = init_sigmoid_threshold
         self.slope = (self.max_sigmoid_threshold-self.init_sigmoid_threshold)/self.max_step
         self.step = None
-
+        self.generated_width = generated_width
 
         self.output_num = (self.T_num_masks+self.F_num_masks)*2 # position and width
         assert(self.output_num>0)
@@ -110,6 +112,18 @@ class _TrainableAugmentModel(nn.Module):
 
         self.all_models = nn.ModuleList(self.all_models)
 
+    def _sampling_width(self):
+        if not self.generated_width:
+            T_width = self.all_models[1].width.detach()
+            F_width = self.all_models[3].width.detach()
+            return T_width, F_width
+        else: 
+            
+            means = torch.zeros(1, self.noise_dim).to(self.device)
+            T_width = self.all_models[1].model(means).detach()[0][0]
+            F_width = self.all_models[3].model(means).detach()[0][0]
+            return T_width, F_width
+
     def set_trainable_aug(self):
         self.trainable_aug = True
         self.train()
@@ -122,7 +136,7 @@ class _TrainableAugmentModel(nn.Module):
         filling_value = 0. if self.replace_with_zero else self._get_mask_mean(feat, feat_len)
         # print('filling_value', filling_value)
         aug_param = self._generate_aug_param(feat, noise=noise)
-        # print('aug_param', aug_param)
+        print('aug_param', aug_param)
 
         if self.trainable_aug:
             return self._forward_trainable(feat, feat_len, filling_value, aug_param)
@@ -130,6 +144,7 @@ class _TrainableAugmentModel(nn.Module):
             return self._forward_not_trainable(feat, feat_len, filling_value, aug_param)
     
     def get_new_noise(self, feat):
+        self.device = feat.device
         return torch.randn(feat.shape[0], self.noise_dim).to(feat.device)
 
     def _generate_aug_param(self, feat, noise=None, std=[4., 1., 4., 1.]):

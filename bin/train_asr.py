@@ -329,6 +329,10 @@ class Solver(BaseSolver):
                     self.aug_model.step()
                     self.aug_model.optimizer_zero_grad()
                     
+                    T_width, F_width = self.aug_model.sampling_width()
+                    # print(T_width)
+                    # print(F_width)
+
                     if self.step % self.valid_step == 0: 
                         print(f'[INFO] - sigmoid threshold = {self.aug_model.get_sigmoid_threshold()} @ step {self.step}')
 
@@ -351,9 +355,11 @@ class Solver(BaseSolver):
                         self.write_log(   'cer',{'tr_ctc':cal_er(self.tokenizer,ctc_output,txt,mode='cer',ctc=True)})
                         self.write_log('ctc_text_train',self.tokenizer.decode(ctc_output[0].argmax(dim=-1).tolist(),
                                                                                                 ignore_repeat=True))
-                    # if self.step==1 or self.step % (self.PROGRESS_STEP * 5) == 0:
-                    #     self.write_log('spec_train',feat_to_fig(feat[0].transpose(0,1).cpu().detach(), spec=True))
-                    #del total_loss
+
+                    if T_width is not None:
+                        self.write_log('T_width',{'T_width':T_width})
+                    if F_width is not None:
+                        self.write_log('F_width',{'F_width':F_width})
 
                 # Validation
                 if (self.step==1) or (self.step%self.valid_step == 0):
