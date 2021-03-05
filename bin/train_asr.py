@@ -272,7 +272,7 @@ class Solver(BaseSolver):
         stop_epoch = 10
         batch_size = self.config['data']['corpus']['batch_size']
         stop_step = len(self.tr_set)*stop_epoch//batch_size
-        
+        T_width, F_width = None, None
 
 
         while self.step< self.max_step:

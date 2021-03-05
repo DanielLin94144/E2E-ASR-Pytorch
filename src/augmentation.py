@@ -116,9 +116,8 @@ class _TrainableAugmentModel(nn.Module):
         if not self.generated_width:
             T_width = self.all_models[1].width.detach()
             F_width = self.all_models[3].width.detach()
-            return T_width, F_width
+            return torch.sigmoid(T_width), torch.sigmoid(F_width)
         else: 
-            
             means = torch.zeros(1, self.noise_dim).to(self.device)
             T_width = self.all_models[1].model(means).detach()[0][0]
             F_width = self.all_models[3].model(means).detach()[0][0]
@@ -136,7 +135,7 @@ class _TrainableAugmentModel(nn.Module):
         filling_value = 0. if self.replace_with_zero else self._get_mask_mean(feat, feat_len)
         # print('filling_value', filling_value)
         aug_param = self._generate_aug_param(feat, noise=noise)
-        print('aug_param', aug_param)
+        # print('aug_param', aug_param)
 
         if self.trainable_aug:
             return self._forward_trainable(feat, feat_len, filling_value, aug_param)
@@ -352,7 +351,8 @@ class _WidthModule(nn.Module):
         if generated_width:
             self.model = self.create_model(noise_dim, dim, use_bn, width_init_bias)
         else:
-            self.width = torch.nn.parameter.Parameter(F.sigmoid(torch.tensor(width_init_bias)), requires_grad=True)
+            # self.width = torch.nn.parameter.Parameter(F.sigmoid(torch.tensor(width_init_bias)), requires_grad=True)
+            self.width = torch.nn.parameter.Parameter(torch.tensor(width_init_bias), requires_grad=True)
 
     def create_model(self, noise_dim, dim, use_bn, width_init_bias):
         module_list = []
@@ -377,6 +377,8 @@ class _WidthModule(nn.Module):
             output = self.model(noise)
         else:
             output = self.width.unsqueeze(0).expand(noise.shape[0]).unsqueeze(-1)
+            # NOT SURE
+            output = torch.sigmoid(output)
         
         if self.random_sample_width:
             return output*torch.rand_like(output)
