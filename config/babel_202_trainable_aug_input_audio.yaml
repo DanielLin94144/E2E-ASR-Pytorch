@@ -1,0 +1,132 @@
+data:
+  corpus:                                 # Pass to dataloader
+    # The following depends on corpus
+    path: '/home/darong/other_storage/MLAS-data/FLP/202-swahili/'
+    name: 'Babel_202'
+    train_split: ['train']
+    dev_split: ['dev']
+    bucketing: True
+    batch_size: 32 # a little smaller batch_size for adadelta
+
+  audio:                                  # Pass to audio transform
+    feat_type: 'fbank'
+    feat_dim:  83 
+    apply_cmvn: False
+    delta_order: 0                      # 0: do nothing, 1: add delta, 2: add delta and accelerate
+    delta_window_size: 2
+    frame_length: 25 # ms
+    frame_shift: 10 # ms
+    ref_level_db: 20
+    min_level_db: -100
+    preemphasis_coeff: 0.97
+    time_aug: False
+  text:
+    mode: 'character'                     # 'character'/'word == phone'/'subword'
+    vocab_file: 'corpus/babel_202.txt'
+    task: 'babel'
+
+hparas:                                   # Experiment hyper-parameters
+  valid_step: 2000
+  max_step: 80000
+  tf_start: 1.0
+  tf_end: 1.0
+  tf_step: 80000
+  optimizer: 'Adadelta'
+  lr: 1
+  eps: 0.00000001                          # 1e-8
+  lr_scheduler: 'fixed'                    # 'fixed'/'warmup'
+  curriculum: 0
+  val_mode: 'cer'
+  early_stopping: False
+  label_smoothing: False
+
+model:                                    # Model architecture
+  ctc_weight: 1.0                      # Weight for CTC loss
+  encoder:
+    vgg: 5                     # 4x reduction on time feature extraction ( 5: VGG + layer normalization)
+    vgg_freq: -1
+    vgg_low_filt: -1
+    module: 'LSTM'                        # 'LSTM'/'GRU'/'Transformer'
+    bidirection: True
+    dim: [256,256,256,256, 256]
+    dropout: [0,0,0,0,0]
+    layer_norm: [False, False, False, False, False]
+    proj: [True,True,True,True, True]           # Linear projection + Tanh after each rnn layer
+    sample_rate: [1,1,1,1,1]
+    sample_style: 'drop'                  # 'drop'/'concat'
+  attention:
+    mode: 'loc'                           # 'dot'/'loc'
+    dim: 300
+    num_head: 1
+    v_proj: False                         # if False and num_head>1, encoder state will be duplicated for each head
+    temperature: 0.5                      # scaling factor for attention
+    loc_kernel_size: 100                  # just for mode=='loc'
+    loc_kernel_num: 10                    # just for mode=='loc'
+  decoder:
+    module: 'LSTM'                        # 'LSTM'/'GRU'/'Transformer'
+    dim: 256
+    layer: 2
+    dropout: 0
+
+augmentation:
+  type: 1 # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
+  trainable_type: 'trainable_aug_input_audio' 
+
+  specaug: # arg meaning please refer to src/audio.py: class Augment # only valid if type==3
+    T: 15
+    num_masks: 1
+    replace_with_zero: False
+    F: 27
+
+  faster_search: False
+  
+  trainable_aug_no_input: # arg meaning please refer to src/augmentation.py: class TrainableAugment # only valid if type==1,2
+    model:
+      T_num_masks: 1
+      F_num_masks: 1
+      T_position_trainable: True # if false, only use random sample as center
+      F_position_trainable: True
+      generated_width: True # if false, only train single value as width
+      random_sample_width: False # if True, multiply a random number on width
+      use_bn: False # use bn in the generated network
+      is_max_T: True
+      noise_dim: 10
+      dim: [10, 10]
+      replace_with_zero: False
+      width_init_bias: -3.
+      init_sigmoid_threshold: 5
+      max_sigmoid_threshold: 15
+      max_step: 80000
+    optimizer:
+      optimizer: 'AdamW'
+      lr: 0.001
+      amsgrad: True
+    search:
+      lr_ratio: 1.
+      forward_optim_method: 'adadelta' # sgd, adadelta
+    fast_search:
+      update_valid_frequency: 1 # the frequency of the update of valid data
+      update_valid_weight: 1. # the weight of the current step gradient
+
+  trainable_aug_input_audio: # arg meaning please refer to src/augmentation.py: class TrainableAugment # only valid if type==1,2
+    model:
+      concat_window: 11
+      dim: [256, 256]
+      use_bn: False 
+      init_bias: 3. 
+      replace_with_zero: False 
+      init_temp: 0.9 
+      max_temp: 0.5 
+      max_step: 80000 
+      share_random: True 
+      using_hard: False
+    optimizer:
+      optimizer: 'AdamW'
+      lr: 0.001
+      amsgrad: True
+    search:
+      lr_ratio: 1.
+      forward_optim_method: 'adadelta' # sgd, adadelta
+    fast_search:
+      update_valid_frequency: 1 # the frequency of the update of valid data
+      update_valid_weight: 1. # the weight of the current step gradient

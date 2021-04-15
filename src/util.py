@@ -174,3 +174,32 @@ def load_embedding(text_encoder, embedding_filepath):
 
 def count_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+def mask_with_length(feat, feat_len, fill_num=0.):
+    '''
+    mask the second dimensin of the feat with feat_len
+    feat: rank>=2 [B x L x ...]
+    feat_len: [B]
+    '''
+    assert (len(feat.size()) >= 2)
+    assert (feat.size()[0] == feat_len.size()[0])
+
+    max_len = feat.size()[1]
+    rank = len(feat.size())
+
+    a = torch.arange(max_len).unsqueeze(0).int()
+    b = feat_len.unsqueeze(1).int()
+    if feat.is_cuda:
+        a = a.cuda()
+        b = b.cuda()
+
+    mask = torch.ge(a, b)
+    mask = mask.view(mask.size()[0],mask.size()[1], *([1]*(rank-2))).expand_as(feat) #mask: where to pad zero
+    #if feat.is_cuda:
+        #mask = mask.cuda()
+    feat_clone = feat.clone() # prevent inplace substitution
+    feat_clone[mask] = fill_num
+    return feat_clone, ~mask
+def get_mask_mean(feat, feat_len):
+    feat, mask = mask_with_length(feat, feat_len)
+    return feat.sum([1,2])/mask.float().sum([1,2])

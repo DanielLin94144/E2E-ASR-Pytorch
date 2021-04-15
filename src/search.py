@@ -65,9 +65,9 @@ class Search():
         Args:
             train_data: [feat, feat_len, .....]
         """
-        return [self.aug_model(train_data[0], train_data[1], noise=self.noise), *train_data[1:]]
+        return [self.aug_model(train_data[0], train_data[1], rand_number=self.rand_number), *train_data[1:]]
 
-    def unrolled_backward(self, train_data, valid_data, model_lr, model_optim, get_loss_func, noise='dummy'):
+    def unrolled_backward(self, train_data, valid_data, model_lr, model_optim, get_loss_func, rand_number='dummy'):
         """ Compute unrolled loss and backward its gradients
         Args:
             train_data, valid_data: data b4 aug, [feat, feat_len, .....]
@@ -76,7 +76,7 @@ class Search():
             model_optim: weights optimizer - for virtual step
             get_loss_func: the function that take the output of model, and get the loss
         """
-        self.noise = self.aug_model.get_new_noise(train_data[0]) # make the noise be consistent over the whole process
+        self.rand_number = self.aug_model.get_new_rand_number(train_data[0]) # make the rand_number be consistent over the whole process
 
         # do virtual step (calc w`)
         all_backward_g = self.virtual_step(train_data, model_lr*self.lr_ratio, model_optim, get_loss_func)
@@ -100,7 +100,7 @@ class Search():
             for alpha, h in zip(self.aug_model.parameters(), hessian):
                 alpha.grad = -model_lr*h
         
-        self.noise = None
+        self.rand_number = None
 
     def compute_hessian(self, dw, train_data, get_loss_func):
         """
@@ -184,9 +184,9 @@ class FasterSearch():
         Args:
             train_data: [feat, feat_len, .....]
         """
-        return [self.aug_model(train_data[0], train_data[1], noise=self.noise), *train_data[1:]]
+        return [self.aug_model(train_data[0], train_data[1], rand_number=self.rand_number), *train_data[1:]]
 
-    def unrolled_backward(self, train_data, valid_data, model_lr, model_optim, get_loss_func, noise=None):
+    def unrolled_backward(self, train_data, valid_data, model_lr, model_optim, get_loss_func, rand_number=None):
         """ Compute unrolled loss and backward its gradients
         Args:
             train_data, valid_data: data b4 aug, [feat, feat_len, .....]
@@ -195,7 +195,7 @@ class FasterSearch():
             model_optim: weights optimizer - for virtual step
             get_loss_func: the function that take the output of model, and get the loss
         """
-        self.noise = noise # noise should be the same with the previous noise to train model
+        self.rand_number = rand_number # rand_number should be the same with the previous rand_number to train model
 
         # calc unrolled loss
         if self.valid_counter%self.update_valid_frequency == 0: # update self.valid_gradient
@@ -220,7 +220,7 @@ class FasterSearch():
             for alpha, h in zip(self.aug_model.parameters(), hessian):
                 alpha.grad = -model_lr*h
         
-        self.noise = None
+        self.rand_number = None
         self.copy_net()
 
     def compute_hessian(self, dw, train_data, get_loss_func):

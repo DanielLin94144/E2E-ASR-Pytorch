@@ -41,7 +41,7 @@ class Solver(BaseSolver):
         else:
             self.train_aug = False
             self.config['data']['audio']['augment'] = False
-            self.config['augmentation'] = {'type':4, 'trainable_aug':{'model':None, 'optimizer':None}}
+            self.config['augmentation'] = {'type':4, trainable_type: 'dummy', 'dummy':{'model':None, 'optimizer':None}}
 
     def fetch_data(self, data, train=False):
         ''' Move data to device and compute text seq. length'''
@@ -135,7 +135,7 @@ class Solver(BaseSolver):
             print(f'[Solver] - using babel dataset')
             self.tr_set, self.dv_set, self.vocab_size, self.tokenizer, msg, self.max_T= \
                             load_babel_dataset(self.paras.njobs, self.paras.gpu, self.paras.pin_memory, 
-                                        self.curriculum>0, self.config['augmentation']['trainable_aug']['model']['is_max_T'],
+                                        self.curriculum>0, self.config['augmentation'][self.config['augmentation']['trainable_type']]['model'].pop('is_max_T', False),
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
@@ -176,13 +176,16 @@ class Solver(BaseSolver):
         batch_size = self.config['data']['corpus']['batch_size']//2
         
         self.model = ASR(self.feat_dim, self.vocab_size, batch_size, **self.config['model']).to(self.device)
+        trainable_aug_type = self.config['augmentation']['trainable_type']
         self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
-                                        self.config['augmentation']['trainable_aug']['model'], \
-                                        self.config['augmentation']['trainable_aug']['optimizer'], self.max_T).to(self.device)
+                                          trainable_aug_type, \
+                                          self.config['augmentation'][trainable_aug_type]['model'], \
+                                          self.config['augmentation'][trainable_aug_type]['optimizer'], self.max_T, self.feat_dim).to(self.device)
         
         
         aug_type = self.config['augmentation']['type']
         print(f'[Augmentation INFO] - augmentation type : {aug_type}')
+        print(f'[Augmentation INFO] - trainable augmentation type : {trainable_aug_type}')
     
             # create search object
         if self.train_aug:
@@ -190,10 +193,10 @@ class Solver(BaseSolver):
 
             if use_faster_search:
                 print('[Augmentation INFO] - use faster search : Yes')
-                self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['fast_search'])
+                self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['fast_search'])
             else:
                 print('[Augmentation INFO] - use faster search : No')
-                self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation']['trainable_aug']['search'])
+                self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['search'])
 
         self.verbose(self.model.create_msg())
         model_paras = [{'params':self.model.parameters()}]
@@ -287,6 +290,7 @@ class Solver(BaseSolver):
             
             
             for tr_data in self.tr_set:
+                print(self.step)
                 # set aug model step
                 self.aug_model.set_step(self.step)
 
@@ -298,8 +302,8 @@ class Solver(BaseSolver):
                 self.timer.cnt('rd')
                 # Forward model
                 # Note: txt should NOT start w/ <sos>
-                noise = self.aug_model.get_new_noise(feat)                
-                aug_feat = self.aug_model(feat, feat_len, noise=noise) 
+                rand_number = self.aug_model.get_new_rand_number(feat)                
+                aug_feat = self.aug_model(feat, feat_len, rand_number=rand_number) 
                 ctc_output, encode_len, att_output, att_align, dec_state = \
                     self.model( aug_feat, feat_len, max(txt_len), tf_rate=tf_rate,
                                     teacher=txt, get_dec_state=False)
@@ -324,8 +328,8 @@ class Solver(BaseSolver):
                     dv_data = next(iter(self.dv_set))
                     train_data = [feat, feat_len, txt, txt_len, tf_rate, stop_step]
                     valid_data = [*self.fetch_data(dv_data), tf_rate, stop_step]
-                    self.search.unrolled_backward(train_data, valid_data, self.optimizer.opt.param_groups[0]['lr'], self.optimizer.opt, self.calc_asr_loss, noise=noise)
-                    noise = None
+                    self.search.unrolled_backward(train_data, valid_data, self.optimizer.opt.param_groups[0]['lr'], self.optimizer.opt, self.calc_asr_loss, rand_number=rand_number)
+                    rand_number = None
                     self.aug_model.step()
                     self.aug_model.optimizer_zero_grad()
                     
@@ -334,7 +338,7 @@ class Solver(BaseSolver):
                     # print(F_width)
 
                     if self.step % self.valid_step == 0: 
-                        print(f'[INFO] - sigmoid threshold = {self.aug_model.get_sigmoid_threshold()} @ step {self.step}')
+                        self.aug_model.log_info()
 
                 self.timer.cnt('aug')
 
