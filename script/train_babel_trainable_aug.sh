@@ -5,7 +5,7 @@
 
 CONFIG="babel_202_trainable_aug"
 
-DIR="/Home/daniel094144/E2E-ASR-Pytorch/"
+DIR="/home/darong/other_storage/e2e_model/"
 
 echo "Start running training process of E2E ASR"
 CUDA_VISIBLE_DEVICES=$2 python3 main.py --config config/${CONFIG}.yaml \

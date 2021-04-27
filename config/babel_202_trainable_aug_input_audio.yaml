@@ -113,12 +113,12 @@ augmentation:
       concat_window: 11
       dim: [256, 256]
       use_bn: False 
-      init_bias: 3. 
+      init_bias: 2. 
       replace_with_zero: False 
       init_temp: 0.9 
       max_temp: 0.5 
       max_step: 80000 
-      share_random: True 
+      share_random: False 
       using_hard: False
     optimizer:
       optimizer: 'AdamW'

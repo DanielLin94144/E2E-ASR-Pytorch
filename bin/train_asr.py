@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 import yaml
+import os
 
 from src.solver import BaseSolver
 
@@ -13,6 +14,7 @@ from src.audio import Delta, Postprocess, Augment
 from src.augmentation import TrainableAugment
 from src.search import Search, FasterSearch
 from src.collect_batch import HALF_BATCHSIZE_AUDIO_LEN
+from src.visualize import visualize_aug
 
 EMPTY_CACHE_STEP = 100
 
@@ -364,6 +366,9 @@ class Solver(BaseSolver):
                         self.write_log('T_width',{'T_width':T_width})
                     if F_width is not None:
                         self.write_log('F_width',{'F_width':F_width})
+
+                    # visualize image
+                    visualize_aug(feat.detach().numpy()[0], aug_feat.detach().numpy()[0], feat_len.detach().numpy()[0], self.step, d=os.path.join(self.logdir, 'aug_pic'))
 
                 # Validation
                 if (self.step==1) or (self.step%self.valid_step == 0):

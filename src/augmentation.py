@@ -83,6 +83,7 @@ class TrainableAugment(nn.Module):
 class _TrainableAugmentModel(nn.Module):
     def __init__(self, max_T=0, T_num_masks=1, F_num_masks=1, T_position_trainable=True, F_position_trainable=True, generated_width=True, random_sample_width=False,  rand_number_dim=10, dim=[10, 10, 10], use_bn=False, \
     replace_with_zero=False, width_init_bias=-3., init_sigmoid_threshold=5, max_sigmoid_threshold=15, max_step = 80000, **kwargs):
+
         '''
         rand_number_dim: the input rand_number to the generation network
         '''
@@ -370,12 +371,12 @@ class _WidthModule(nn.Module):
             return output
 
 if __name__ == '__main__':
-    batch_size = 3
+    batch_size = 50
     l = 20
     feat_dim = 5
     feat = torch.rand(batch_size, l, feat_dim).cuda()
     # feat_len = torch.randint(1, l-1, size=(batch_size,)).cuda()
-    feat_len = torch.tensor([20,10,5]).cuda()
+    feat_len = torch.tensor([20]*batch_size).cuda()
 
     # testing normal case
     trainable_aug = _TrainableAugmentModel(T_num_masks=1, rand_number_dim=100, generated_width=False, random_sample_width=True).cuda()

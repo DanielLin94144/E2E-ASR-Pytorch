@@ -85,7 +85,6 @@ class _TrainableAugmentModelWithInput(nn.Module):
 
         hard_prob = torch.where(soft_prob>0.5, torch.ones_like(pre_sigmoid_prob), torch.zeros_like(pre_sigmoid_prob))
         hard_prob = (hard_prob - soft_prob).detach() + soft_prob
-
         return soft_prob, hard_prob
 
     def _forward_trainable(self, feat, feat_len, filling_value, pre_sigmoid_prob, rand_number):
@@ -151,28 +150,31 @@ class _MaskProbB4SigmoidModule(nn.Module):
 
 if __name__ == '__main__':
     batch_size = 3
-    l = 7
+    l = 11
     feat_dim = 5
     feat = torch.rand(batch_size, l, feat_dim).cuda()
     # feat_len = torch.randint(1, l-1, size=(batch_size,)).cuda()
-    feat_len = torch.tensor([7,5,3]).cuda()
+    feat_len = torch.tensor([11,9,7]).cuda()
+    feat, _ = mask_with_length(feat, feat_len)
 
     module = _MaskProbB4SigmoidModule(feature_dim=feat_dim).cuda()
     result = module(feat, feat_len)
     print(result.shape)
 
     # testing normal case
-    trainable_aug = _TrainableAugmentModelWithInput(feature_dim=feat_dim, init_bias=3.).cuda()
+    trainable_aug = _TrainableAugmentModelWithInput(feature_dim=feat_dim, share_random=False, concat_window=3, init_bias=2.).cuda()
     trainable_aug.set_step(0)
     print(feat)
     for i in range(1):
+        print('test soft')
         trainable_aug.set_trainable_aug()
         new_feat_soft  = trainable_aug(feat, feat_len)
         print(new_feat_soft.shape)
-        print(new_feat_soft)
+        print(new_feat_soft-feat)
+        print('test hard')
         trainable_aug.disable_trainable_aug()
         new_feat_hard  = trainable_aug(feat, feat_len)
         print(new_feat_hard.shape)
-        print(new_feat_hard)
+        print(new_feat_hard-feat)
 
 
