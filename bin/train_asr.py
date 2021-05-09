@@ -368,7 +368,7 @@ class Solver(BaseSolver):
                         self.write_log('F_width',{'F_width':F_width})
 
                     # visualize image
-                    visualize_aug(feat.detach().numpy()[0], aug_feat.detach().numpy()[0], feat_len.detach().numpy()[0], self.step, d=os.path.join(self.logdir, 'aug_pic'))
+                    visualize_aug(feat.detach().cpu().numpy()[0], aug_feat.detach().cpu().numpy()[0], feat_len.detach().cpu().numpy()[0], self.step, d=os.path.join(self.logdir, 'aug_pic'))
 
                 # Validation
                 if (self.step==1) or (self.step%self.valid_step == 0):
