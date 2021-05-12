@@ -3,6 +3,7 @@ import torch.nn as nn
 from torch.nn.utils.rnn import pad_sequence
 import yaml
 import os
+import numpy as np
 
 from src.solver import BaseSolver
 
@@ -29,6 +30,11 @@ class Solver(BaseSolver):
         self.WER = 'per' if self.val_mode == 'per' else 'wer'
         self.max_T = None
 
+        self.specaug = None
+        self.train_aug = False
+        self.start_aug_step = self.config['augmentation']['start_aug_step']
+    
+    def set_aug(self):
         # put specaug config
         if ('augmentation' in self.config):
             if self.config['augmentation']['type'] == 3: # specaug
@@ -43,7 +49,40 @@ class Solver(BaseSolver):
         else:
             self.train_aug = False
             self.config['data']['audio']['augment'] = False
-            self.config['augmentation'] = {'type':4, trainable_type: 'dummy', 'dummy':{'model':None, 'optimizer':None}}
+            self.config['augmentation'] = {'type':4, 'trainable_type': 'dummy', 'dummy':{'model':None, 'optimizer':None}}
+
+        # specaug
+        augment = self.config['data']['audio'].pop("augment", False)
+        if augment:
+            self.specaug = Augment(**augment)
+        else:
+            self.specaug = None
+
+        # trainable aug
+        trainable_aug_type = self.config['augmentation']['trainable_type']
+        self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
+                                          trainable_aug_type, \
+                                          self.config['augmentation'][trainable_aug_type]['model'], \
+                                          self.config['augmentation'][trainable_aug_type]['optimizer'], self.max_T, self.feat_dim).to(self.device)
+        
+        
+        aug_type = self.config['augmentation']['type']
+        print(f'[Augmentation INFO] - augmentation type : {aug_type}')
+        print(f'[Augmentation INFO] - trainable augmentation type : {trainable_aug_type}')
+    
+            # create search object
+        if self.train_aug:
+            use_faster_search = self.config['augmentation'].pop('faster_search', False)
+
+            if use_faster_search:
+                print('[Augmentation INFO] - use faster search : Yes')
+                self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['fast_search'])
+            else:
+                print('[Augmentation INFO] - use faster search : No')
+                self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['search'])
+
+        if self.paras.load_aug:
+            self.aug_model.load_ckpt(self.paras.load_aug) # aug model 
 
     def fetch_data(self, data, train=False):
         ''' Move data to device and compute text seq. length'''
@@ -127,11 +166,6 @@ class Solver(BaseSolver):
                 force_reload = True,
             )
             self.feat_dim = self.upstream.get_output_dim()
-            augment = self.config['data']['audio'].pop("augment", False)
-            if augment:
-                self.specaug = Augment(**augment)
-            else:
-                self.specaug = None
 
         elif self.paras.babel is not None:
             print(f'[Solver] - using babel dataset')
@@ -141,11 +175,6 @@ class Solver(BaseSolver):
                                         **self.config['data'])
             self.feat_dim = self.config['data']['audio']['feat_dim']
             self.verbose(msg)
-            augment = self.config['data']['audio'].pop("augment", False)
-            if augment:
-                self.specaug = Augment(**augment)
-            else:
-                self.specaug = None
 
         else:
             self.tr_set, self.dv_set, self.feat_dim, self.vocab_size, self.tokenizer, msg = \
@@ -178,27 +207,8 @@ class Solver(BaseSolver):
         batch_size = self.config['data']['corpus']['batch_size']//2
         
         self.model = ASR(self.feat_dim, self.vocab_size, batch_size, **self.config['model']).to(self.device)
-        trainable_aug_type = self.config['augmentation']['trainable_type']
-        self.aug_model = TrainableAugment(self.config['augmentation']['type'], \
-                                          trainable_aug_type, \
-                                          self.config['augmentation'][trainable_aug_type]['model'], \
-                                          self.config['augmentation'][trainable_aug_type]['optimizer'], self.max_T, self.feat_dim).to(self.device)
-        
-        
-        aug_type = self.config['augmentation']['type']
-        print(f'[Augmentation INFO] - augmentation type : {aug_type}')
-        print(f'[Augmentation INFO] - trainable augmentation type : {trainable_aug_type}')
-    
-            # create search object
-        if self.train_aug:
-            use_faster_search = self.config['augmentation'].pop('faster_search', False)
-
-            if use_faster_search:
-                print('[Augmentation INFO] - use faster search : Yes')
-                self.search = FasterSearch(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['fast_search'])
-            else:
-                print('[Augmentation INFO] - use faster search : No')
-                self.search =       Search(self.model, self.aug_model, self.config['hparas'], **self.config['augmentation'][trainable_aug_type]['search'])
+        # dummy aug model
+        self.aug_model = TrainableAugment(4, 'dummy', None,None, None, None).to(self.device)
 
         self.verbose(self.model.create_msg())
         model_paras = [{'params':self.model.parameters()}]
@@ -229,10 +239,6 @@ class Solver(BaseSolver):
         """
         if self.paras.load: 
             self.load_ckpt() # model, model optimizer, step, performance
-    
-        if self.paras.load_aug:
-            self.aug_model.load_ckpt(self.paras.load_aug) # aug model 
-
 
     def calc_asr_loss(self, ctc_output, encode_len, att_output, txt, txt_len, stop_step):
         total_loss = 0
@@ -292,6 +298,10 @@ class Solver(BaseSolver):
             
             
             for tr_data in self.tr_set:
+                if self.step > self.start_aug_step:
+                    print(f'[Augmentation INFO] - start using augmentation')
+                    self.set_aug()
+                    self.start_aug_step = np.inf
                 print(self.step)
                 # set aug model step
                 self.aug_model.set_step(self.step)
@@ -467,13 +477,13 @@ class Solver(BaseSolver):
                 self.save_checkpoint('best_{}_{}.pth'.format(task, _name + (self.save_name if self.transfer_learning else '')), 
                                     self.val_mode,dev_er[task],_name)
                 # save aug model ckpt 
-                if self.config['augmentation']['type'] != 4 and self.config['augmentation']['type'] != 3:
+                if self.train_aug:
                     self.aug_model.save_ckpt(self.ckpdir+'/best_aug.pth')
 
             if self.step >= self.max_step:
                 self.save_checkpoint('last_{}_{}.pth'.format(task, _name + (self.save_name if self.transfer_learning else '')), 
                                     self.val_mode,dev_er[task],_name)
-                if self.config['augmentation']['type'] != 4 and self.config['augmentation']['type'] != 3:
+                if self.train_aug:
                     self.aug_model.save_ckpt(self.ckpdir+'/last_aug.pth')
 
             self.write_log(self.WER,{'dv_'+task+'_'+_name.lower():dev_wer[task]})

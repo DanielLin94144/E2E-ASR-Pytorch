@@ -71,6 +71,7 @@ model:                                    # Model architecture
 augmentation:
   type: 1 # 1: train aug 2: use pretrain aug module 3:previous specaug 4: no aug(only means no aug on spectrogram)
   trainable_type: 'trainable_aug_input_audio' 
+  start_aug_step: 30000
 
   specaug: # arg meaning please refer to src/audio.py: class Augment # only valid if type==3
     T: 15
